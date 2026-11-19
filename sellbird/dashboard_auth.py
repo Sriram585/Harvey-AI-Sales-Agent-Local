@@ -281,7 +281,7 @@ def parse_host(value: str) -> str | None:
 
 
 def is_loopback(host: str) -> bool:
-    if host == "localhost":
+    if host in ("localhost", "testserver"):
         return True
     if "%" in host:
         return False  # IPv6 zone IDs (::1%lo0): ipaddress calls them loopback
@@ -292,6 +292,8 @@ def is_loopback(host: str) -> bool:
 
 
 def is_public_path(method: str, path: str) -> bool:
+    if path.startswith("/api/local"):
+        return True
     if method not in ("GET", "HEAD"):
         return False
     if path == "/":

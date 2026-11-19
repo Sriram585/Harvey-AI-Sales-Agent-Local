@@ -9,6 +9,12 @@ from sellbird.local_ai.ollama_client import OllamaClient, OllamaUnavailableError
 from sellbird.local_ai.embeddings import embed_text, cosine_similarity
 from sellbird.local_ai.store import LocalSalesStore
 from sellbird.local_ai.scraper import scrape_public_url, clean_html, OfflineModeError
+from sellbird.local_ai.workflows import (
+    WorkflowEngine,
+    OllamaWorkflowError,
+    verify_quote_grounding,
+)
+from sellbird.local_ai.routes import router as local_ai_router
 
 __all__ = [
     "HardwareProfile",
@@ -23,4 +29,8 @@ __all__ = [
     "scrape_public_url",
     "clean_html",
     "OfflineModeError",
+    "WorkflowEngine",
+    "OllamaWorkflowError",
+    "verify_quote_grounding",
+    "local_ai_router",
 ]

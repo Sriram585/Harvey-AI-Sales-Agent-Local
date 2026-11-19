@@ -15,6 +15,7 @@ T = TypeVar("T", bound=BaseModel)
 
 DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
 DEFAULT_KEEP_ALIVE = "30m"
+DEFAULT_RECOMMENDED_MODEL = "qwen3:4b"
 INFERENCE_LOG_FILE = Path("logs") / "local_inference.jsonl"
 
 
