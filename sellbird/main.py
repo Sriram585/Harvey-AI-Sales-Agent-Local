@@ -34,7 +34,7 @@ def quiet_http_client_logs():
     """Keep request URLs out of the terminal.
 
     httpx logs every request at INFO ("HTTP Request: GET https://...") with
-    the full query string. Reoon and ZeroBounce only accept their API key as
+    the full query string. Some services only accept their API key as
     a query parameter, so at INFO `sellbird run` would print those keys in
     clear text on every verification. Nothing in those lines is useful to a
     user, so both client loggers sit at WARNING.
@@ -145,8 +145,7 @@ def unusable_backlog_notice(summary: dict) -> str:
     return (
         f"Sellbird found {recent} prospects in the last day, but none has a verified "
         "or catch-all email, so it paused prospecting for about a day to save search "
-        "and verifier credits. Add an email verifier key (REOON_API_KEY, "
-        "ZEROBOUNCE_API_KEY or HUNTER_API_KEY in .env) or check it still has credits. "
+        "and verifier credits. Verify addresses or check verifier credits. "
         "`sellbird export --all` exports the list as it is."
     )
 
@@ -160,7 +159,7 @@ async def decide_next_action(
     """Decide what Sellbird should do next based on current state.
 
     Uses deterministic priority rules (send_campaign > write_campaign >
-    prospect > idle) instead of burning a Claude call on a decision that is
+    prospect > idle) instead of burning a brain call on a decision that is
     fully derivable from pipeline counts. This saves budget every cycle and
     removes a fragile LLM string-parsing step.
 
@@ -319,7 +318,7 @@ async def heartbeat(stop_event: asyncio.Event | None = None):
     analyst = Analyst(state)
 
     interval = config.usage.heartbeat_interval_minutes * 60
-    max_calls = max(int(200 * (config.usage.max_daily_claude_percent / 100)), 1)
+    max_calls = max(int(200 * (getattr(config.usage, "max_daily_percent", 80.0) / 100)), 1)
     consecutive_errors = 0
 
     while not stop_event.is_set():
@@ -365,8 +364,7 @@ async def heartbeat(stop_event: asyncio.Event | None = None):
                     break
                 continue
 
-            # 2. Is the brain usable at all? (Codex: CLI version, isolation,
-            # login, account and model checked without a prompt.) If not, do nothing
+            # 2. Is the brain usable at all? If not, do nothing
             # this cycle — no replies consumed, nothing written or sent —
             # and say why, rather than running agents that would each fail.
             problem = await brain.preflight()
@@ -381,12 +379,13 @@ async def heartbeat(stop_event: asyncio.Event | None = None):
 
             # 3. Check usage budget (real subscription quota when readable,
             # else Sellbird's own call counter)
+            max_pct = getattr(config.usage, "max_daily_percent", 80.0)
             if not await brain.is_within_budget(
-                max_calls, max_percent=config.usage.max_daily_claude_percent
+                max_calls, max_percent=max_pct
             ):
                 logger.info(
                     f"{brain.provider_label} usage limit reached "
-                    f"({config.usage.max_daily_claude_percent}% of quota or "
+                    f"({max_pct}% of quota or "
                     f"{max_calls} calls). Sleeping 1h, then re-checking."
                 )
                 if await _interruptible_sleep(3600, stop_event):
@@ -413,7 +412,7 @@ async def heartbeat(stop_event: asyncio.Event | None = None):
 
             if action == "prospect":
                 tasks.append(("prospect", scout.run()))
-                # Analyst is cheap (no Claude calls) — keep analytics fresh
+                # Analyst is cheap (no brain calls) — keep analytics fresh
                 tasks.append(("analyze", analyst.run()))
             elif action == "write_campaign":
                 tasks.append(("write_campaign", writer.run()))
@@ -436,7 +435,7 @@ async def heartbeat(stop_event: asyncio.Event | None = None):
 
             # Profiling rides along every cycle. It is three HTTP requests per
             # business with no model call, so it costs nothing against the
-            # Claude budget the rest of this loop is rationing — and it is what
+            # brain budget the rest of this loop is rationing — and it is what
             # turns a name and a domain into something worth writing about.
             if summary.get("unprofiled", 0):
                 tasks.append(("profile", run_profile_stage(state, limit=25, config=config)))

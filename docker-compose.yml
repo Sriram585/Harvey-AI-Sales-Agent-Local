@@ -18,12 +18,6 @@ services:
         target: /app
         bind:
           create_host_path: false
-      # The Claude CLI refreshes OAuth tokens in place.
-      - type: bind
-        source: ${HOME}/.claude
-        target: /home/sellbird/.claude
-        bind:
-          create_host_path: false
     restart: unless-stopped
     init: true
     logging:

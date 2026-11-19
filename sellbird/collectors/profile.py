@@ -56,7 +56,7 @@ BENIGN_HOSTS = (
     # accessibility / compliance widgets
     "accessibe", "userway", "audioeye", "termly", "iubenda", "onetrust",
     # infra / CDNs / platforms
-    "cloudflare", "godaddy", "wordpress.org", "wix.com", "squarespace.com",
+    "cdn_provider", "godaddy", "wordpress.org", "wix.com", "squarespace.com",
     "shopify.com", "webflow.com", "duda.co", "gtranslate", "jquery",
     "gstatic", "googleapis", "cloudfront", "akamai", "w3.org", "schema.org",
     # industry bodies / certs
@@ -107,8 +107,7 @@ BOOKING_HINTS = (r"calendly\.com", r"acuityscheduling", r"schedulicity",
                  r"schedule[-_]?(an?[-_])?(appointment|estimate|consultation)",
                  r"housecallpro", r"getjobber\.com", r"servicetitan")
 
-AI_CRAWLERS = ("gptbot", "google-extended", "ccbot", "anthropic-ai", "claudebot",
-               "perplexitybot", "bytespider")
+AI_CRAWLERS = ("bot", "crawler", "spider")
 
 TEAM_PATHS = ("/team", "/about", "/about-us", "/our-team", "/staff",
               "/leadership", "/meet-the-team", "/company/team")
@@ -286,7 +285,7 @@ _BLOCK_MARKERS = (
     "detected unusual activity",
     "/sorry/index",
     "/.well-known/sgcaptcha",       # SiteGround's bot challenge (served as a 202)
-    "cf-chl-", "cf_chl_opt",        # Cloudflare's interstitial
+    "cf-chl-", "cf_chl_opt",        # Bot challenge interstitial
     "px-captcha",                   # PerimeterX / HUMAN
     "_incapsula_resource", "incapsula incident id",
     "sucuri website firewall",
@@ -857,7 +856,7 @@ class ProfileCollector:
         self._client: httpx.AsyncClient | None = None
         self.site_names: dict[str, str] = {}
         # Hosts that answered with a bot challenge (SiteGround's 202,
-        # Cloudflare's "Just a moment...") rather than a page.
+        # Bot challenge "Just a moment...") rather than a page.
         self.challenged: set[str] = set()
 
     def wants(self, code: str) -> bool:

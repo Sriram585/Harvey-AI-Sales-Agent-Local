@@ -174,7 +174,7 @@ async def test_a_new_hold_after_a_stale_one_starts_now(state):
 @pytest.mark.parametrize("unread,paused,problem,expected", [
     (["read_replies"], "", "gmail: not signed in", "gmail: not signed in"),
     (["read_replies"], "", "", "replies couldn't all be read and handled."),
-    (["read_replies"], "Codex is paused", "gmail: x", None),      # the brain card covers it
+    (["read_replies"], "Brain is paused", "gmail: x", None),      # the brain card covers it
     ([], "", "", ""),                                             # sending ran: clear
 ])
 def test_when_the_heartbeat_records_a_hold(unread, paused, problem, expected):

@@ -52,7 +52,7 @@ async def test_update_prospect_email(state):
 @pytest.mark.asyncio
 async def test_save_email_pattern_keeps_highest_confidence(state):
     await state.save_email_pattern("acme.com", pattern="{f}.{l}", source="default", confidence=0.3)
-    await state.save_email_pattern("acme.com", pattern="{fi}{l}", source="hunter", confidence=0.9)
+    await state.save_email_pattern("acme.com", pattern="{fi}{l}", source="website", confidence=0.9)
     cached = await state.get_email_pattern("acme.com")
     assert cached["pattern"] == "{fi}{l}"
     assert cached["confidence"] == 0.9

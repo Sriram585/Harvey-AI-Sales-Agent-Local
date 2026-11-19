@@ -49,7 +49,7 @@ def make_scout(companies, do_not_contact=(LISTED,)):
         channels=SimpleNamespace(linkedin=SimpleNamespace(enabled=False)),
         compliance=ComplianceConfig(do_not_contact=list(do_not_contact)),
     )
-    env = SimpleNamespace(hunter_api_key="")
+    env = SimpleNamespace()
     scout = Scout(brain=None, state=FakeState(companies), config=config, env=env)
     scout._seen_domains = set()
     scout._seen_prospect_keys = set()
@@ -77,28 +77,6 @@ async def test_backfill_skips_listed_companies_and_marks_them_checked():
     assert scout.contacted == [OTHER]
     # Listed ones are checked too, so the rotation moves past them.
     assert scout.state.checked == ["c1", "c2", "c3"]
-
-
-@pytest.mark.asyncio
-async def test_hunter_backfill_spends_no_credit_on_a_listed_company(monkeypatch):
-    scout = make_scout(COMPANIES[:1] + COMPANIES[2:])
-    scout.env = SimpleNamespace(hunter_api_key="fake-key")
-    looked_up = []
-
-    async def people(domain, api_key, limit=10):
-        looked_up.append(domain)
-        return []
-
-    import sellbird.agents.scout as scout_mod
-    import sellbird.integrations.email_finder as ef
-    monkeypatch.setattr(ef, "hunter_domain_people", people)
-    monkeypatch.setattr(ef, "_hunter_monthly_cap", lambda: 25)
-    # One domain a cycle by default; two here so the pass reaches the
-    # company after the listed one.
-    monkeypatch.setattr(scout_mod, "HUNTER_DOMAINS_PER_CYCLE", 2)
-    await scout._prospect_via_hunter()
-    assert looked_up == [OTHER]
-    assert scout.state.checked == ["c1", "c3"]
 
 
 @pytest.mark.asyncio

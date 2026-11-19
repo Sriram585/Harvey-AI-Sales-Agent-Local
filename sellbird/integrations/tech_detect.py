@@ -63,7 +63,7 @@ FINGERPRINTS: dict[str, list[str]] = {
     "BigCommerce": [r"cdn\d*\.bigcommerce\.com"],
 
     # Hosting/infra hints
-    "Cloudflare": [r"/cdn-cgi/"],
+    "CDN-CGI": [r"/cdn-cgi/"],
     "Vercel": [r"vercel\.app", r"x-vercel"],
 }
 

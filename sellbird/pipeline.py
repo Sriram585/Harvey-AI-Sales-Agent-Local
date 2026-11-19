@@ -66,7 +66,7 @@ async def run_profile_stage(
 
     Returns (companies, observations, run_id). Free — three HTTP requests per
     business, no browser, no model call — so it is safe to run on every
-    heartbeat without touching the Claude budget. ``config`` says which open
+    heartbeat without touching the brain budget. ``config`` says which open
     roles count as hiring intent (``icp.hiring_signals``, else ``icp.titles``).
     """
     from sellbird.collectors.profile import profile_companies

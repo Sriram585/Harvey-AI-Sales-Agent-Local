@@ -50,13 +50,13 @@ def test_a_paused_brain_is_on_today_not_hidden(client, monkeypatch):
     import json as _json
     import sellbird.dashboard as dash
     asyncio.run(StateManager(str(client.db_path)).init_db())
-    monkeypatch.setattr(dash, "_active_provider", lambda: "codex")
+    monkeypatch.setattr(dash, "_active_provider", lambda: "local")
     _sql(client.db_path, "INSERT INTO settings (key, value) VALUES (?, ?)",
          (__import__("sellbird.brain", fromlist=["x"]).BRAIN_STATUS_KEY,
-          _json.dumps({"provider": "codex", "status": "paused", "reason": "codex login expired"})))
+          _json.dumps({"provider": "local", "status": "paused", "reason": "local login expired"})))
     items = client.get("/api/today").json()["items"]
     [item] = [i for i in items if i["key"] == "brain-paused"]
-    assert "codex login expired" in item["detail"] and item["tone"] == "bad"
+    assert "local login expired" in item["detail"] and item["tone"] == "bad"
 
 
 def test_a_run_that_went_quiet_is_not_shown_as_running(client):

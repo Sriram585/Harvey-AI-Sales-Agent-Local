@@ -1,7 +1,6 @@
 """Trainer — give Sellbird a URL and it learns everything about the product.
 
-Uses Cloudflare Browser Rendering /crawl API for deep site crawling.
-Falls back to manual scraping if no Cloudflare credentials are configured.
+Uses website scraping and extraction for product training.
 """
 
 import asyncio
@@ -39,7 +38,7 @@ def _normalize_start_url(url: str) -> str:
         url = f"https://{url}"
     return url
 
-# Fallback: pages to try if Cloudflare crawl is unavailable
+# Pages to try during crawl
 FALLBACK_PATHS = [
     "/", "/about", "/about-us", "/pricing", "/features", "/product",
     "/products", "/solutions", "/services", "/how-it-works", "/why-us",
@@ -47,167 +46,8 @@ FALLBACK_PATHS = [
     "/team", "/our-team", "/blog", "/resources", "/integrations",
 ]
 
-# Cloudflare API
-CF_API_BASE = "https://api.cloudflare.com/client/v4/accounts"
-
-# How long to poll before giving up (seconds)
-CRAWL_TIMEOUT = 600  # 10 minutes
-POLL_INTERVAL = 10   # check every 10 seconds
-
-
-class CloudflareCrawler:
-    """Cloudflare Browser Rendering /crawl API client."""
-
-    def __init__(self, account_id: str, api_token: str):
-        self.account_id = account_id
-        self.api_token = api_token
-        self.base_url = f"{CF_API_BASE}/{account_id}/browser-rendering/crawl"
-        self.headers = {
-            "Authorization": f"Bearer {api_token}",
-            "Content-Type": "application/json",
-        }
-
-    async def crawl(
-        self,
-        url: str,
-        max_pages: int = 100,
-        depth: int = 5,
-        render: bool = True,
-    ) -> dict[str, str]:
-        """Crawl a website and return {url: markdown_content} for all pages.
-
-        Uses Cloudflare's /crawl endpoint which:
-        - Renders JavaScript (SPAs, dynamic content)
-        - Discovers pages via sitemaps + links
-        - Returns content as clean markdown
-        - Respects robots.txt
-        - Can crawl up to 100,000 pages
-        """
-        async with httpx.AsyncClient(timeout=60, headers=self.headers) as client:
-            # 1. Start the crawl job
-            payload = {
-                "url": url,
-                "limit": max_pages,
-                "depth": depth,
-                "formats": ["markdown"],
-                "render": render,
-                "source": "all",
-                "options": {
-                    "includeSubdomains": False,
-                    "includeExternalLinks": False,
-                },
-                "rejectResourceTypes": ["image", "media", "font", "stylesheet"],
-            }
-
-            logger.info(f"Starting Cloudflare crawl: {url} (max {max_pages} pages)")
-            resp = await client.post(self.base_url, json=payload)
-
-            if resp.status_code != 200:
-                logger.error(f"Cloudflare crawl start failed: {resp.status_code} {resp.text}")
-                return {}
-
-            result = resp.json()
-            if not result.get("success"):
-                logger.error(f"Cloudflare crawl error: {result}")
-                return {}
-
-            job_id = result.get("result")
-            if not job_id:
-                logger.error("No job ID returned from Cloudflare crawl")
-                return {}
-
-            logger.info(f"Crawl job started: {job_id}")
-
-            # 2. Poll for completion
-            pages = await self._poll_job(client, job_id)
-            return pages
-
-    async def _poll_job(self, client: httpx.AsyncClient, job_id: str) -> dict[str, str]:
-        """Poll a crawl job until complete, then collect all pages."""
-        start_time = time.time()
-        pages: dict[str, str] = {}
-
-        while time.time() - start_time < CRAWL_TIMEOUT:
-            # Check status with minimal data
-            resp = await client.get(
-                f"{self.base_url}/{job_id}",
-                params={"limit": 1},
-            )
-
-            if resp.status_code != 200:
-                logger.error(f"Poll failed: {resp.status_code}")
-                break
-
-            data = resp.json().get("result", {})
-            status = data.get("status", "unknown")
-            total = data.get("total", 0)
-            finished = data.get("finished", 0)
-
-            elapsed = int(time.time() - start_time)
-            print(f"\r      Crawling... {finished}/{total} pages ({elapsed}s)", end="", flush=True)
-
-            if status in ("completed", "cancelled_due_to_timeout", "cancelled_due_to_limits"):
-                print()  # newline after progress
-                if status != "completed":
-                    logger.warning(f"Crawl ended with status: {status}")
-                break
-
-            if status == "errored":
-                logger.error("Crawl job errored")
-                print()
-                break
-
-            await asyncio.sleep(POLL_INTERVAL)
-
-        # 3. Collect all results with pagination
-        pages = await self._collect_results(client, job_id)
-        return pages
-
-    async def _collect_results(
-        self, client: httpx.AsyncClient, job_id: str
-    ) -> dict[str, str]:
-        """Paginate through all crawl results and collect markdown content."""
-        pages: dict[str, str] = {}
-        cursor = None
-
-        while True:
-            params = {"limit": 50, "status": "completed"}
-            if cursor:
-                params["cursor"] = cursor
-
-            resp = await client.get(
-                f"{self.base_url}/{job_id}",
-                params=params,
-            )
-
-            if resp.status_code != 200:
-                break
-
-            data = resp.json().get("result", {})
-            records = data.get("records", [])
-
-            for record in records:
-                url = record.get("url", "")
-                markdown = record.get("markdown", "")
-                if url and markdown:
-                    pages[url] = markdown
-
-            # Check for next page
-            next_cursor = data.get("cursor")
-            if not next_cursor or next_cursor == cursor:
-                break
-            cursor = next_cursor
-
-        return pages
-
-
-class FallbackCrawler:
-    """Recursive HTTP crawler for when Cloudflare is not configured.
-
-    Starts with priority pages, then follows every internal link it finds
-    on each crawled page until it hits the max_pages limit.
-    """
-
+class SimpleCrawler:
+    """Recursive HTTP crawler for website training."""
     # Set when a page was refused for pointing at a local or private address.
     blocked = False
 
@@ -396,7 +236,7 @@ def merge_trained_config(learned: dict, existing: dict | None) -> dict:
 
 def _offer_from(product_info: dict) -> dict:
     """The offer ideas training found. Training never picks the offer: the
-    user works it out with their agent (CLAUDE.md, Step 3b) and confirms it
+    user works it out with their agent (Step 3b) and confirms it
     on Your company."""
     ideas = product_info.get("entry_offer_ideas")
     ideas = [str(i).strip() for i in ideas if str(i).strip()][:4] if isinstance(ideas, list) else []
@@ -455,7 +295,7 @@ def write_trained_config(learned: dict, path: Path) -> dict:
 class Trainer:
     def __init__(self, brain_config: BrainConfig | None = None):
         # Without an explicit choice, train with whatever provider the
-        # existing config selects (Claude when none does).
+        # existing config selects (local when none does).
         self.brain_config = brain_config or load_brain_config()
         self.state = StateManager()
         self.brain = Brain(self.state, self.brain_config)
@@ -469,7 +309,7 @@ class Trainer:
     ):
         """Train Sellbird on a product website.
 
-        1. Deep crawl the site (Cloudflare /crawl or fallback)
+        1. Deep crawl the site (website crawler)
         2. Analyze all content with the configured brain
         3. Extract product info, ICP, objections, competitive intel
         4. Generate complete config + product knowledge skill
@@ -492,21 +332,10 @@ class Trainer:
         print(f"  Learning from: {base_url}")
         print(f"{'='*60}\n")
 
-        # Step 1: Deep crawl
-        cf_account_id = os.getenv("CLOUDFLARE_ACCOUNT_ID", "")
-        cf_api_token = os.getenv("CLOUDFLARE_API_TOKEN", "")
-
-        if cf_account_id and cf_api_token:
-            print(f"[1/6] Deep crawling with Cloudflare (up to {max_pages} pages)...")
-            crawler = CloudflareCrawler(cf_account_id, cf_api_token)
-            self.scraped_pages = await crawler.crawl(
-                base_url, max_pages=max_pages, depth=10
-            )
-        else:
-            print("[1/6] Crawling website (add CLOUDFLARE_ACCOUNT_ID and")
-            print("      CLOUDFLARE_API_TOKEN to .env for deep JS-rendered crawling)...")
-            crawler = FallbackCrawler()
-            self.scraped_pages = await crawler.crawl(base_url, max_pages=max_pages)
+        # Step 1: Crawl website
+        print(f"[1/6] Crawling website (up to {max_pages} pages)...")
+        crawler = SimpleCrawler()
+        self.scraped_pages = await crawler.crawl(base_url, max_pages=max_pages)
 
         if not self.scraped_pages:
             if getattr(crawler, "blocked", False):
@@ -618,7 +447,7 @@ class Trainer:
         return fence(all_content, "your website")
 
     async def _extract_product_info(self) -> dict:
-        """Ask Claude to extract product information from all crawled content."""
+        """Ask the Brain to extract product information from all crawled content."""
         all_content = self._get_all_content()
 
         prompt = f"""Analyze this entire website and extract comprehensive product/company information.
@@ -653,7 +482,7 @@ Be thorough — you have access to the full website. Extract everything relevant
         return result if isinstance(result, dict) else {}
 
     async def _extract_icp(self) -> dict:
-        """Ask Claude to determine the ideal customer profile from all content."""
+        """Ask the Brain to determine the ideal customer profile from all content."""
         all_content = self._get_all_content(max_chars=40000)
 
         prompt = f"""Based on this entire website, determine the Ideal Customer Profile (ICP).
@@ -1003,7 +832,7 @@ What prospects do instead of buying a solution like ours:
                 },
             },
             "usage": {
-                "max_daily_claude_percent": 80,
+                "max_daily_percent": 80,
                 "heartbeat_interval_minutes": 15,
                 "quiet_hours": {
                     "start": "22:00",
@@ -1032,12 +861,7 @@ def main():
         print("  python -m sellbird.trainer https://acmecorp.com")
         print("  python -m sellbird.trainer https://acmecorp.com 200")
         print("")
-        print("For deep JS-rendered crawling, add to .env:")
-        print("  CLOUDFLARE_ACCOUNT_ID=your_account_id")
-        print("  CLOUDFLARE_API_TOKEN=your_api_token")
-        print("")
-        print("Without Cloudflare credentials, Sellbird will use basic HTTP")
-        print("scraping (no JavaScript rendering, limited page discovery).")
+        print("Sellbird will use HTTP scraping for page discovery.")
         sys.exit(1)
 
     url = _normalize_start_url(sys.argv[1])

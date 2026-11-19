@@ -1,11 +1,9 @@
 """Send windows in the recipient's own time zone (#53): working out each
 recipient's zone, the window maths (DST, weekends, windows that cross UTC
-midnight), staging and draining through the outbox, Precleared's country
-filling a gap, and quiet hours that no longer hold due mail. Also the
-country Sellbird works out the same way and gives Precleared, when it is sure.
+midnight), staging and draining through the outbox, and quiet hours that no longer hold due mail.
 
 No network and no real clock where it matters: the sender's clock is pinned
-with monkeypatch, and Precleared calls go to an httpx.MockTransport.
+with monkeypatch, 
 """
 
 import asyncio
@@ -25,7 +23,6 @@ from pydantic import ValidationError
 
 import sellbird.agents.sender as sender_mod
 from sellbird.config import EmailChannelConfig, SellbirdConfig, SendWindowConfig
-from sellbird.integrations.precleared import SETTINGS_PREFIX, PreclearedClient
 from sellbird.models.company import Company
 from sellbird.models.prospect import Prospect
 from sellbird.send_window import (
@@ -199,7 +196,7 @@ def test_two_letter_code_that_is_a_state_and_a_country():
     ("Amsterdam, NL", "", "52.37,4.90", "Europe/Amsterdam"),
     ("Adelaide, SA", "", "-34.93,138.60", "Australia/Adelaide"),
     ("Riyadh, SA", "", "24.71,46.68", "Asia/Riyadh"),
-    # So does a country from elsewhere (Precleared or prospect_country).
+    # So does a country from elsewhere (prospect_country).
     ("Jakarta, ID", "ID", "", "Asia/Jakarta"),
     ("Berlin, DE", "GB", "", "Europe/London"),       # it beats the code's guess
     ("Mumbai, IN", "IN", "", "Asia/Kolkata"),
@@ -217,7 +214,7 @@ def test_code_that_is_a_region_and_a_country_is_settled_by_what_else_is_known(
     assert zone_for(location, country=country, point=point) == zone
 
 
-# ── The country, for Precleared ──
+# ── The country resolution ──
 
 def test_country_for_names_a_country():
     assert country_for("Oslo, Norway") == ("NO", True)
@@ -310,7 +307,7 @@ async def test_recipient_country_reads_the_location_and_the_cached_coordinates(s
 async def test_a_zone_stored_from_coordinates_alone_gives_no_country(state):
     # "Seattle" with cached coordinates gets Vancouver's zone (the nearest
     # reference city, over the border): the right clock, so it is stored,
-    # but not a country to tell Precleared.
+    # but not a settled country.
     pid = await seed_at(state, "Seattle", "sam@sea.example")
     await state.set_setting("geo:seattle", "47.61,-122.33")
     cfg = SimpleNamespace(compliance=None)
@@ -547,193 +544,10 @@ async def test_follow_up_ready_time_moves_into_the_window(state, monkeypatch):
     assert_office_hours(ready, "America/New_York")
 
 
-OK_GB = {
-    "verdict": "ok_to_email", "confidence": "high", "reasons": [],
-    "facts": {"recipient_country": "GB", "country_source": "domain"},
-    "receipt": {"id": "cc_rcpt_GB0000000001"},
-}
-
-
-def precleared_mock(calls, body):
-    def handler(request):
-        calls.append(json.loads(request.content))
-        return httpx.Response(200, json=body)
-    return httpx.MockTransport(handler)
-
-
-@pytest.mark.asyncio
-async def test_precleared_country_sets_the_zone_when_nothing_else_does(state, monkeypatch):
-    pid = await seed_at(state, "", "kate@uk-acme.co.uk")
-    item = await approved(state, pid, "kate@uk-acme.co.uk")
-    calls = []
-    provider = FakeProvider()
-    sender = window_sender(state, provider, monkeypatch, operator_zone="Asia/Tokyo")
-    sender.precleared = PreclearedClient(sender_country="GB", transport=precleared_mock(calls, OK_GB))
-
-    # 06:30 UTC: 15:30 in Tokyo (inside the fallback window), 07:30 in London.
-    pin_now(monkeypatch, datetime(2026, 10, 21, 6, 30))
-    await sender._drain_due()
-    assert provider.sent == [] and len(calls) == 1
-    assert (await state.get_prospect(pid)).timezone == "Europe/London"
-    moved = datetime.fromisoformat((await outbox_row(state, item))["send_at"])
-    assert_office_hours(moved, "Europe/London")
-
-    # Later that morning in London it goes, on the cached verdict.
-    pin_now(monkeypatch, datetime(2026, 10, 21, 9, 0))
-    await sender._drain_due()
-    assert [m["to"] for m in provider.sent] == ["kate@uk-acme.co.uk"]
-    assert len(calls) == 1
-
-
-@pytest.mark.asyncio
-async def test_precleared_country_wins_over_the_configured_prospect_country(state, monkeypatch):
-    # prospect_country is the fallback for when nothing else places the
-    # recipient: once Precleared says Germany, the window is Berlin's, not
-    # the London one the configured default gave before the check ran.
-    from sellbird.config import ComplianceConfig
-    pid = await seed_at(state, "", "lena@de-acme.example")
-    item = await approved(state, pid, "lena@de-acme.example")
-    calls = []
-    provider = FakeProvider()
-    sender = window_sender(state, provider, monkeypatch, operator_zone="Asia/Tokyo")
-    monkeypatch.setattr(sender.config, "compliance", ComplianceConfig(
-        precleared={"prospect_country": "GB"}), raising=False)
-    ok_de = {**OK_GB, "facts": {"recipient_country": "DE"}}
-    sender.precleared = PreclearedClient(sender_country="GB", transport=precleared_mock(calls, ok_de))
-
-    # 15:30 UTC on a Wednesday: 16:30 in London, 17:30 in Berlin.
-    pin_now(monkeypatch, datetime(2026, 10, 21, 15, 30))
-    await sender._drain_due()
-    assert provider.sent == [] and len(calls) == 1
-    assert (await state.get_prospect(pid)).timezone == "Europe/Berlin"
-    moved = datetime.fromisoformat((await outbox_row(state, item))["send_at"])
-    assert_office_hours(moved, "Europe/Berlin")
-
-
-@pytest.mark.asyncio
-async def test_precleared_country_settles_a_code_that_is_a_state_and_a_country(state, monkeypatch):
-    # "Berlin, DE" reads as Delaware until something says Germany. Staging
-    # mustn't store that reading for good, or Precleared's answer never counts.
-    pid = await seed_at(state, "Berlin, DE", "lena@de-acme.example", status="new")
-    campaign = await seed_campaign(state, [pid])
-    calls = []
-    provider = FakeProvider()
-    sender = window_sender(state, provider, monkeypatch)
-    ok_de = {**OK_GB, "facts": {"recipient_country": "DE"}}
-    sender.precleared = PreclearedClient(sender_country="GB", transport=precleared_mock(calls, ok_de))
-
-    # 15:30 UTC on a Wednesday: 11:30 in New York, 17:30 in Berlin.
-    pin_now(monkeypatch, datetime(2026, 10, 21, 15, 30))
-    await sender._stage_campaign_native(campaign)
-    first = [r for r in await state.get_outbox(limit=10) if r["step"] == 1][0]
-    await sender._drain_due()
-    assert provider.sent == [] and len(calls) == 1
-    assert (await state.get_prospect(pid)).timezone == "Europe/Berlin"
-    moved = datetime.fromisoformat((await outbox_row(state, first["id"]))["send_at"])
-    assert_office_hours(moved, "Europe/Berlin")
-
-
-@pytest.mark.asyncio
-async def test_a_state_code_that_is_also_a_country_still_gets_the_state_window(state, monkeypatch):
-    # Without Precleared nothing settles "DE", so it isn't stored, but the
-    # US reading still applies every time it's worked out.
-    pid = await seed_at(state, "Wilmington, DE", "sam@de-state.example", status="new")
-    campaign = await seed_campaign(state, [pid])
-    pin_now(monkeypatch, WED_0200)
-    await window_sender(state, FakeProvider(), monkeypatch)._stage_campaign_native(campaign)
-    for row in await state.get_outbox(limit=10):
-        assert_office_hours(datetime.fromisoformat(row["send_at"]), "America/New_York")
-    assert (await state.get_prospect(pid)).timezone == ""
-
-
-@pytest.mark.asyncio
-async def test_precleared_keeps_the_country_with_the_cached_verdict(state):
-    calls = []
-    client = PreclearedClient(sender_country="GB", transport=precleared_mock(calls, OK_GB))
-    first = await client.clear("kate@uk-acme.co.uk", state)
-    again = await client.clear("kate@uk-acme.co.uk", state)
-    assert first.country == again.country == "GB" and len(calls) == 1
-    cached = json.loads(await state.get_setting(SETTINGS_PREFIX + "kate@uk-acme.co.uk"))
-    assert cached["country"] == "GB"
-    odd = PreclearedClient(sender_country="GB", transport=precleared_mock(
-        [], {**OK_GB, "facts": {"recipient_country": "Great Britain"}}))
-    assert (await odd.clear("x@y.co.uk", state)).country == ""
-
-
-# ── The country Sellbird gives Precleared ──
-
-def checked_sender(state, provider, calls, body=OK_GB, **client):
-    """A sender without a window, so only the check matters, on a mocked Precleared."""
-    sender = make_sender(state, provider, require_approval=False)
-    sender.precleared = PreclearedClient(sender_country="GB", transport=precleared_mock(calls, body), **client)
-    return sender
-
-
-@pytest.mark.asyncio
-async def test_sender_passes_the_company_country_to_precleared(state):
-    pid = await seed_at(state, "Austin, TX", "jane@tx-acme.com")
-    await approved(state, pid, "jane@tx-acme.com")
-    calls, provider = [], FakeProvider()
-    ok_us = {**OK_GB, "facts": {"recipient_country": "US"}}
-    # Even with a default configured, a country Sellbird is sure of goes instead.
-    await checked_sender(state, provider, calls, ok_us, prospect_country="GB")._drain_due()
-    assert [m["to"] for m in provider.sent] == ["jane@tx-acme.com"]
-    assert calls[0]["recipient_country"] == "US"
-    assert "default_recipient_country" not in calls[0]
-
-
-@pytest.mark.asyncio
-async def test_sender_falls_back_to_prospect_country_as_the_default(state):
-    pid = await seed_at(state, "", "kate@uk-acme.co.uk")
-    await approved(state, pid, "kate@uk-acme.co.uk")
-    calls = []
-    await checked_sender(state, FakeProvider(), calls, prospect_country="GB")._drain_due()
-    assert calls[0]["default_recipient_country"] == "GB"
-    assert "recipient_country" not in calls[0]
-
-
-@pytest.mark.asyncio
-async def test_sender_sends_no_country_for_a_guessed_state_code(state):
-    # "DE" is Delaware by convention and Germany by code: not sure, so nothing.
-    pid = await seed_at(state, "Wilmington, DE", "sam@de-state.example")
-    await approved(state, pid, "sam@de-state.example")
-    calls = []
-    await checked_sender(state, FakeProvider(), calls)._drain_due()
-    assert len(calls) == 1
-    assert "recipient_country" not in calls[0] and "default_recipient_country" not in calls[0]
-
-
-@pytest.mark.asyncio
-async def test_sender_settles_a_state_code_by_the_cached_coordinates(state):
-    pid = await seed_at(state, "Berlin, DE", "lena@de-acme.example")
-    await approved(state, pid, "lena@de-acme.example")
-    await state.set_setting("geo:berlin, de", "52.52,13.40")
-    calls = []
-    ok_de = {**OK_GB, "facts": {"recipient_country": "DE"}}
-    await checked_sender(state, FakeProvider(), calls, ok_de)._drain_due()
-    assert calls[0]["recipient_country"] == "DE"
-
-
-@pytest.mark.asyncio
-async def test_country_lookup_failure_does_not_stop_the_drain(state, monkeypatch):
-    pid = await seed_at(state, "Austin, TX", "jane@tx-acme.com")
-    await approved(state, pid, "jane@tx-acme.com")
-    calls, provider = [], FakeProvider()
-    sender = checked_sender(state, provider, calls)
-
-    async def boom(state, prospect):
-        raise RuntimeError("country lookup failed")
-    monkeypatch.setattr(sender_mod, "recipient_country", boom)
-    await sender._drain_due()
-    # The check still runs, without a country, and the email still sends.
-    assert [m["to"] for m in provider.sent] == ["jane@tx-acme.com"]
-    assert len(calls) == 1 and "recipient_country" not in calls[0]
-
-
 # ── Quiet hours ──
 
 class _Brain:
-    provider_label = "Claude"
+    provider_label = "Local"
     model = ""
     paused_reason = None
 
@@ -875,22 +689,7 @@ async def test_quiet_hours_dont_wake_for_mail_that_cannot_go(state, monkeypatch,
         monkeypatch, _quiet_cfg(**email), state, calls, stop, provider)
     pin_now(monkeypatch, WED_0200)
     await asyncio.wait_for(main_mod.heartbeat(stop), timeout=30)
-    assert calls == [] and provider.sent == []  # no reading mail, no Claude
-
-
-@pytest.mark.asyncio
-async def test_quiet_hours_dont_wake_after_a_compliance_hold(state, monkeypatch):
-    pid = await seed_at(state, "Tokyo, Japan", "aiko@tokyo.example")
-    await approved(state, pid, "aiko@tokyo.example")
-    provider = FakeProvider()
-    sender = window_sender(state, provider, monkeypatch)
-    down = httpx.MockTransport(lambda request: httpx.Response(503))
-    sender.precleared = PreclearedClient(sender_country="GB", transport=down)
-    pin_now(monkeypatch, WED_0200)  # 11:00 in Tokyo
-    assert await sender.cold_due_in_window()
-    await sender._drain_due()
-    assert provider.sent == []
-    assert not await sender.cold_due_in_window()  # until a drain outside quiet hours
+    assert calls == [] and provider.sent == []  # no reading mail, no brain
 
 
 @pytest.mark.asyncio
@@ -941,34 +740,6 @@ async def test_quiet_hours_dont_wake_under_the_warmup_cap(state, monkeypatch):
                         WarmupConfig(start_date=date.today().isoformat()), raising=False)
     assert not await sender.cold_due_in_window()  # day one: warmup only, no cold email
 
-
-@pytest.mark.asyncio
-async def test_precleared_main_zone_is_used_on_every_check(state, monkeypatch):
-    # Precleared says Australia, which gives a main zone that isn't stored.
-    # Every later check must still use it, not the operator's zone: the two
-    # windows don't overlap, so needing both would hold the email for good.
-    pid = await seed_at(state, "", "mia@au-acme.example")
-    item = await approved(state, pid, "mia@au-acme.example")
-    calls, provider = [], FakeProvider()
-    sender = window_sender(state, provider, monkeypatch, operator_zone="America/New_York")
-    ok_au = {**OK_GB, "facts": {"recipient_country": "AU"}}
-    sender.precleared = PreclearedClient(sender_country="GB", transport=precleared_mock(calls, ok_au))
-    pin_now(monkeypatch, datetime(2026, 10, 21, 14, 0))  # 10:00 New York, 01:00 Sydney
-    await sender._drain_due()
-    assert provider.sent == [] and len(calls) == 1
-    moved = datetime.fromisoformat((await outbox_row(state, item))["send_at"])
-    assert_office_hours(moved, "Australia/Sydney")
-    pin_now(monkeypatch, moved + timedelta(minutes=1))
-    await state.update_outbox_item(item, send_at=(moved - timedelta(days=3)).isoformat())
-    await sender._drain_due()
-    assert [m["to"] for m in provider.sent] == ["mia@au-acme.example"]
-
-
-def _utc_now_iso():
-    return datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
-
-
-# ── Storage ──
 
 @pytest.mark.asyncio
 async def test_existing_prospects_get_an_empty_zone_on_upgrade(tmp_path):

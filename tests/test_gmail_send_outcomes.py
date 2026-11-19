@@ -16,7 +16,7 @@ def transport_provider(monkeypatch, handler):
     client = httpx.AsyncClient
 
     # The patch below replaces httpx.AsyncClient for the whole process, so
-    # other requests in a heartbeat (the Claude usage check) come here too.
+    # other requests in a heartbeat (the usage check) come here too.
     # Only Gmail's reach the scripted handler, so they can't use up its replies.
     def gmail_only(request):
         if request.url.host != 'gmail.googleapis.com':
@@ -126,8 +126,8 @@ async def test_no_token_does_not_attempt_send(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_transport_read_failure_then_recovery_sends_once(monkeypatch, tmp_path):
-    from tests.test_codex_e2e import Harness, _approved_item
-    harness = Harness(monkeypatch, tmp_path, provider='claude', model='')
+    from tests.harness import Harness, _approved_item
+    harness = Harness(monkeypatch, tmp_path, provider='local', model='local')
     await harness.state.init_db()
     await _approved_item(harness.state)
     reads, posts, after_failure = [], [], []
@@ -155,8 +155,8 @@ async def test_transport_read_failure_then_recovery_sends_once(monkeypatch, tmp_
 
 @pytest.mark.asyncio
 async def test_transport_second_page_unsubscribe_precedes_send(monkeypatch, tmp_path):
-    from tests.test_codex_e2e import Harness, _approved_item
-    harness = Harness(monkeypatch, tmp_path, provider='claude', model='')
+    from tests.harness import Harness, _approved_item
+    harness = Harness(monkeypatch, tmp_path, provider='local', model='local')
     await harness.state.init_db()
     await _approved_item(harness.state)
     await harness.state.mark_reply_processed('old')

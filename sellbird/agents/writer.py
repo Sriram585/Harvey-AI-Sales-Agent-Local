@@ -81,7 +81,7 @@ def _names(prospect) -> list[str]:
                         getattr(prospect, "last_name", ""), getattr(prospect, "title", "")) if n]
 
 
-# Native mode: one Claude call per prospect for email 1, so batches stay
+# Native mode: one model call per prospect for email 1, so batches stay
 # small — the rest of the 'new' pool is picked up on later cycles.
 NATIVE_BATCH_CAP = 8
 LEGACY_BATCH_CAP = 50
@@ -222,7 +222,7 @@ class Writer:
             return
 
         # Only write for prospects we can actually deliver to. Guessed and
-        # invalid addresses are skipped so we don't spend Claude calls (or
+        # invalid addresses are skipped so we don't spend model calls (or
         # sending reputation) on mail that will bounce.
         prospects_with_email = [
             p for p in new_prospects
@@ -888,7 +888,7 @@ Return ONLY a JSON object: {{"subject": "...", "body": "..."}}"""
             batches[key].append(prospect)
 
         # Cap batch size. Native mode stays small because email 1 is drafted
-        # per prospect (one Claude call each); leftovers ride the next cycle.
+        # per prospect (one model call each); leftovers ride the next cycle.
         # Small segments also outperform blasts on deliverability.
         cap = NATIVE_BATCH_CAP if self.is_native else LEGACY_BATCH_CAP
         return {key: group[:cap] for key, group in batches.items()}

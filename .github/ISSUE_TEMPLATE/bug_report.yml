@@ -35,7 +35,7 @@ body:
     id: provider
     attributes:
       label: Model provider
-      options: [Claude Code, Codex]
+      options: [Local]
   - type: dropdown
     id: mail
     attributes:

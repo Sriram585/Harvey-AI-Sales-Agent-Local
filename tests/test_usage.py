@@ -29,7 +29,7 @@ async def state():
 async def test_record_usage_event_and_totals(state):
     ok = await state.record_usage_event(
         agent="writer", task="write_sequence", session_id="sess-1",
-        model="claude-opus-4-8", input_tokens=100, output_tokens=500,
+        model="local-model", input_tokens=100, output_tokens=500,
         cache_read_tokens=2000, cache_creation_tokens=300,
         cost_usd=0.05, duration_ms=1200, num_turns=1,
     )
@@ -46,15 +46,15 @@ async def test_record_usage_event_and_totals(state):
 async def test_usage_by_agent_groups_and_counts_sessions(state):
     # Two model-rows from the SAME call (same session) → one "call"
     await state.record_usage_event(
-        agent="scout", session_id="sess-a", model="claude-opus-4-8",
+        agent="scout", session_id="sess-a", model="local-model",
         output_tokens=10, cost_usd=0.01,
     )
     await state.record_usage_event(
-        agent="scout", session_id="sess-a", model="claude-haiku-4-5",
+        agent="scout", session_id="sess-a", model="local-model",
         output_tokens=5, cost_usd=0.001,
     )
     await state.record_usage_event(
-        agent="handler", session_id="sess-b", model="claude-opus-4-8",
+        agent="handler", session_id="sess-b", model="local-model",
         output_tokens=20, cost_usd=0.02,
     )
 
@@ -68,11 +68,11 @@ async def test_usage_by_agent_groups_and_counts_sessions(state):
 @pytest.mark.asyncio
 async def test_request_key_dedup(state):
     first = await state.record_usage_event(
-        request_key="msg_1:req_1", model="claude-opus-4-8",
+        request_key="msg_1:req_1", model="local-model",
         output_tokens=50, source="transcript",
     )
     second = await state.record_usage_event(
-        request_key="msg_1:req_1", model="claude-opus-4-8",
+        request_key="msg_1:req_1", model="local-model",
         output_tokens=50, source="transcript",
     )
     assert first is True
@@ -91,12 +91,12 @@ SAMPLE_RESULT = {
     "is_error": False,
     "duration_ms": 1428,
     "num_turns": 1,
-    "result": "Hello from Claude",
+    "result": "Hello from Brain",
     "session_id": "f362e409-925c-4eb1-ba98-60484bb2dcf5",
     "total_cost_usd": 0.0182948,
     "usage": {"input_tokens": 10, "output_tokens": 51},
     "modelUsage": {
-        "claude-haiku-4-5-20251001": {
+        "local-model-20251001": {
             "inputTokens": 10, "outputTokens": 51,
             "cacheReadInputTokens": 17198, "cacheCreationInputTokens": 8155,
             "costUSD": 0.0182948,
@@ -107,7 +107,7 @@ SAMPLE_RESULT = {
 
 def test_parse_result_payload_json():
     text, payload = Brain._parse_result_payload(json.dumps(SAMPLE_RESULT))
-    assert text == "Hello from Claude"
+    assert text == "Hello from Brain"
     assert payload["session_id"] == "f362e409-925c-4eb1-ba98-60484bb2dcf5"
 
 
@@ -134,13 +134,13 @@ async def test_brain_records_usage_from_payload(state):
     assert rows[0]["cost_usd"] == pytest.approx(0.0182948, abs=1e-4)
 
     by_model = await state.usage_by_model(days=1)
-    assert by_model[0]["model"] == "claude-haiku-4-5-20251001"
+    assert by_model[0]["model"] == "local-model-20251001"
 
 
 @pytest.mark.asyncio
 async def test_usage_is_sellbird_only(state):
     """Sanity: the ledger only contains rows Sellbird's Brain wrote. There is
-    no transcript scan to pull in other projects' Claude sessions."""
+    no transcript scan to pull in other projects' sessions."""
     import sellbird.usage as usage_mod
     assert not hasattr(usage_mod, "reconcile_transcripts")
     assert not hasattr(usage_mod, "parse_transcript_events")
@@ -150,7 +150,7 @@ async def test_usage_is_sellbird_only(state):
 
 
 def test_token_from_json_blob():
-    blob = json.dumps({"claudeAiOauth": {"accessToken": "sk-ant-oat01-abc"}})
+    blob = json.dumps({"localAiOauth": {"accessToken": "local-token"}})
     assert _token_from_json_blob(blob) == "sk-ant-oat01-abc"
     assert _token_from_json_blob("not json") is None
     assert _token_from_json_blob(json.dumps({"other": 1})) is None

@@ -10,9 +10,9 @@ Sellbird automates outreach, but **you are the sender.** Cold email is legal in 
 
 **GDPR / PECR (EU & UK).** B2B cold email needs a defensible legitimate interest: the pitch must be genuinely relevant to that person's role, you must know where the data came from, and objecting must be effortless. If you can't say why a specific person would care, Sellbird shouldn't email them — and its qualification rules say so.
 
-**Per-recipient check (optional).** Those rules turn on facts about each recipient: a UK sole trader needs consent where a limited company doesn't, Germany wants prior consent even for business email, and Canada's CASL depends on whether the address was published. With `compliance.precleared.enabled: true`, Sellbird asks [Precleared](https://precleared.dev) about each new recipient before the first cold email. Anything other than `ok_to_email` holds that email back, with the rule and the next step shown in the Outbox, and the signed receipt id is logged with every send. One check per address, cached for 30 days (changing the sender country, address source, product description or the country sent with it triggers a fresh check); replies are never checked; native providers (Gmail, Microsoft 365, SMTP) only. Sellbird tells Precleared the recipient's country when it is sure of it from the company's location (a country, a US state, a Canadian province or an Australian state named there, as for the send window), and Precleared takes that as settled; otherwise Precleared works the country out from the address, company records or the company's website. If all your prospects are in one country, also set `prospect_country` (for example `US`), which Precleared uses only when none of those show it; without it, the one country every `icp.geography` entry is in serves as that default. Precleared receives the recipient's address, your sender country, the address source, your product description and the recipient's country when Sellbird is sure of it, else your prospects' country if there is one. It also receives the company's name and the person's name when Sellbird has them, which it uses to find a UK company on the Companies House register when the domain alone doesn't (it doesn't store the person's name). Without a key it allows 10 checks a day. A free key (`PRECLEARED_API_KEY`) allows 100 a day for its first 14 days, then 25, and `sellbird setup` or `sellbird precleared-key` gets one with just your email address. Put the setting in `sellbird.yaml`, or in `sellbird.local.yaml` if you trained Sellbird, since that file wins. [docs/precleared.md](precleared.md) has the details, verdict by verdict.
+**Per-recipient check (optional).** Those rules turn on facts about each recipient: a UK sole trader needs consent where a limited company doesn't, Germany wants prior consent even for business email, and Canada's CASL depends on whether the address was published. With `compliance.compliance.enabled: true`, Sellbird asks [Compliance](https://compliance.dev) about each new recipient before the first cold email. Anything other than `ok_to_email` holds that email back, with the rule and the next step shown in the Outbox, and the signed receipt id is logged with every send. One check per address, cached for 30 days (changing the sender country, address source, product description or the country sent with it triggers a fresh check); replies are never checked; native providers (Gmail, Microsoft 365, SMTP) only. Sellbird tells Compliance the recipient's country when it is sure of it from the company's location (a country, a US state, a Canadian province or an Australian state named there, as for the send window), and Compliance takes that as settled; otherwise Compliance works the country out from the address, company records or the company's website. If all your prospects are in one country, also set `prospect_country` (for example `US`), which Compliance uses only when none of those show it; without it, the one country every `icp.geography` entry is in serves as that default. Compliance receives the recipient's address, your sender country, the address source, your product description and the recipient's country when Sellbird is sure of it, else your prospects' country if there is one. It also receives the company's name and the person's name when Sellbird has them, which it uses to find a UK company on the Companies House register when the domain alone doesn't (it doesn't store the person's name). Without a key it allows 10 checks a day. A free key (`COMPLIANCE_API_KEY`) allows 100 a day for its first 14 days, then 25, and `sellbird setup` or `sellbird compliance-key` gets one with just your email address. Put the setting in `sellbird.yaml`, or in `sellbird.local.yaml` if you trained Sellbird, since that file wins. [docs/compliance.md](compliance.md) has the details, verdict by verdict.
 
-**If the check is held up.** When Precleared can't answer (the day's free checks are used up, the key is out of checks, was rejected or is being rate limited, or Precleared can't be reached), cold email to new addresses waits and replies still go out; email to people Precleared has already cleared keeps going. If Precleared can't check one address, that email is tried again six hours later and the rest carry on, unless that happens at two different domains with no answer in between, which holds new addresses as above. The Today page and `sellbird status` say how many cold emails are waiting on the check and what fixes it.
+**If the check is held up.** When Compliance can't answer (the day's free checks are used up, the key is out of checks, was rejected or is being rate limited, or Compliance can't be reached), cold email to new addresses waits and replies still go out; email to people Compliance has already cleared keeps going. If Compliance can't check one address, that email is tried again six hours later and the rest carry on, unless that happens at two different domains with no answer in between, which holds new addresses as above. The Today page and `sellbird status` say how many cold emails are waiting on the check and what fixes it.
 
 **Bot disclosure.** Some jurisdictions require disclosing automation. Sellbird is instructed to answer truthfully, always, if a prospect asks whether they're talking to an AI. Never configure it otherwise.
 
@@ -26,30 +26,30 @@ your explicit choice.
 
 1. Buy a **dedicated sending domain** (`getacme.com`, not `acme.com`).
 2. Set up **SPF, DKIM and DMARC** on it. Without all three, Gmail junks you. `sellbird warmup` checks them, plus domain age, blocklists, your warmup progress and bounce rate, and ends with READY / NOT READY. It only reads public DNS and Sellbird's own records.
-3. **Warm up for 2–4 weeks** before real volume, and keep warmup running after. We recommend [TrulyInbox](https://trulyinbox.com/?via=sellbird); see [Warmup with TrulyInbox](#warmup-with-trulyinbox).
+3. **Warm up for 2–4 weeks** before real volume, and keep warmup running after. We recommend [Warmup](https://warmup.com/?via=sellbird); see [Warmup with Warmup](#warmup-with-warmup).
 4. **Ramp slowly** — 10–20/day per inbox, adding ~5/day. The `max_daily_sends: 50` default is a ceiling, not a target. Set `channels.email.warmup.start_date` and Sellbird does this for you (Gmail, Microsoft, SMTP; Instantly has its own warmup): no cold email for `min_days`, then a cold-email cap that climbs by `daily_increase` a day. Replies always go out.
 5. **Watch bounces.** Above ~3%, stop and fix list quality. Sellbird trips its own kill switch past your configured threshold.
 
 *None of this is legal advice. Sending at scale or into regulated industries? Talk to a lawyer.*
 
-### Warmup with TrulyInbox
+### Warmup with Warmup
 
 Whether a mailbox is warmed isn't something DNS can tell you: only the warmup
-service sees where its mail lands. We recommend [TrulyInbox](https://trulyinbox.com/?via=sellbird), and Sellbird
+service sees where its mail lands. We recommend [Warmup](https://warmup.com/?via=sellbird), and Sellbird
 connects to it so `sellbird warmup` can say whether your mailbox is actually ready:
 
-1. **Get TrulyInbox** at [trulyinbox.com](https://trulyinbox.com/?via=sellbird) and add your sending mailbox.
+1. **Get Warmup** at [warmup.com](https://warmup.com/?via=sellbird) and add your sending mailbox.
    Connecting Sellbird needs API access, which starts on the Starter plan.
-2. **Create a key.** In TrulyInbox, open Settings > API keys and create a
+2. **Create a key.** In Warmup, open Settings > API keys and create a
    workspace key with `accounts:read`, `warmup:read`, `analytics:read` and
    `workspace:read`.
-3. **Connect it**: `sellbird trulyinbox connect`, or paste it into the warmup step
+3. **Connect it**: `sellbird warmup connect`, or paste it into the warmup step
    on the dashboard's Today page. Sellbird checks the key before saving it to `.env`.
 
-`sellbird warmup` then reads the mailbox from TrulyInbox and calls it ready only
+`sellbird warmup` then reads the mailbox from Warmup and calls it ready only
 when it's enrolled, signed in, has warmed for `min_days` (14 by default), and
 less than 5% of its warmup mail landed in spam. Sellbird only reads: it never
-enrolls, pauses or changes anything in your TrulyInbox account.
+enrolls, pauses or changes anything in your Warmup account.
 
-Already warming with another service? `sellbird trulyinbox other` (or *I use
+Already warming with another service? `sellbird warmup other` (or *I use
 another service* on the dashboard) and Sellbird stops suggesting it.

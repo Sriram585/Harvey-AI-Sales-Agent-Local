@@ -234,9 +234,9 @@ async def test_an_unsubscribe_seen_only_in_history_stops_the_follow_up(monkeypat
     """The heartbeat, end to end: cycle 1 reads the week and confirms; cycle 2
     reads just the history, which carries an unsubscribe, and nothing sends."""
     import httpx
-    from tests.test_codex_e2e import Harness, _approved_item
+    from tests.harness import Harness, _approved_item
     from tests.test_gmail_send_outcomes import transport_provider
-    harness = Harness(monkeypatch, tmp_path, provider="claude", model="")
+    harness = Harness(monkeypatch, tmp_path, provider="local", model="local")
     await harness.state.init_db()
     calls = []
 

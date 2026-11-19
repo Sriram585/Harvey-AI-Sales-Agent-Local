@@ -1,7 +1,6 @@
 # Getting help
 
-- **Setting up?** Open the project in Claude Code and say "set up Sellbird for
-  me". The repo's `CLAUDE.md` walks you through it.
+- **Setting up?** Run `sellbird setup` in your terminal to walk through setup.
 - **Something not working?** Check [docs/troubleshooting.md](docs/troubleshooting.md)
   first, then search the [issues](https://github.com/ethanplusai/sellbird/issues).
 - **Found a bug?** Open an issue with the bug template. Leave out real contact

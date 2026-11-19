@@ -234,10 +234,9 @@ function meterHtml(pct, segments) {
 
 const SOURCE_LABELS = {
   company_website: 'Team page', known_company_backfill: 'Team page',
-  scraped_mailto: 'Published address', hunter_domain_search: 'Hunter', linkedin_search: 'LinkedIn',
+  scraped_mailto: 'Published address', linkedin_search: 'LinkedIn',
   job_board: 'Job board', web_search: 'Web search', company_inbox: 'Company inbox',
-  osm: 'OpenStreetMap', dataforseo_listings: 'DataForSEO', dataforseo_serp: 'DataForSEO SERP', dataforseo_maps: 'DataForSEO Maps',
-  serper: 'Serper', tinyfish: 'TinyFish', scavio_maps: 'Scavio Maps', scavio_search: 'Scavio Search',
+  osm: 'OpenStreetMap',
 };
 function sourceLabel(s) {
   if (!s) return '';
@@ -728,41 +727,8 @@ async function loadSetupStatus() {
     '</div>';
 }
 
-// The warmup step: get TrulyInbox, paste its key, or say you use another service.
 function warmupServiceActions(c) {
-  return '<div class="btn-group warmup-actions">' +
-      '<a class="btn btn-primary btn-sm" href="' + safeHref(c.link) + '" target="_blank" ' +
-        'rel="noopener sponsored">Get TrulyInbox</a>' +
-      '<input class="form-input" id="trulyinbox-key" type="password" autocomplete="off" ' +
-        'placeholder="Paste your TrulyInbox API key" aria-label="TrulyInbox API key" ' +
-        'onkeydown="if (event.key === \'Enter\') connectTrulyInbox()">' +
-      '<button class="btn btn-secondary btn-sm" id="trulyinbox-go" onclick="connectTrulyInbox()">Connect</button>' +
-      '<button class="btn btn-ghost btn-sm" onclick="useOtherWarmup()">I use another service</button>' +
-    '</div>';
-}
-
-async function connectTrulyInbox() {
-  const input = document.getElementById('trulyinbox-key');
-  const go = document.getElementById('trulyinbox-go');
-  if (!input || !input.value.trim()) return;
-  if (go) go.disabled = true;
-  const data = await api('/api/trulyinbox/connect', {
-    method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({key: input.value.trim()}),
-  });
-  if (go) go.disabled = false;
-  if (data && data.success) {
-    input.value = '';
-    showToast(data.message || 'TrulyInbox connected', 'success');
-    loadSetupStatus();
-  } else {
-    showToast((data && data.message) || 'Could not connect TrulyInbox', 'error');
-  }
-}
-
-async function useOtherWarmup() {
-  const data = await api('/api/trulyinbox/other', {method: 'POST'});
-  if (data && data.success) loadSetupStatus();
+  return '';
 }
 
 // ── Signals: Sellbird proposes, you confirm ──
@@ -1281,18 +1247,14 @@ async function loadSettings() {
   document.getElementById('m365-client').value = data.m365_client_id || '';
   document.getElementById('m365-tenant').value = data.m365_tenant_id || '';
   document.getElementById('linkedin-email').value = data.linkedin_email || '';
-  document.getElementById('cf-account-id').value = data.cloudflare_account_id || '';
+
 
   savedPh('gmail-secret', data.gmail_client_secret_set, 'Enter client secret');
   savedPh('smtp-pass', data.smtp_password_set, 'Enter password / app password');
   savedPh('imap-pass', data.imap_password_set, 'Same as SMTP password');
   document.getElementById('imap-same-pass').checked = !data.imap_password_set;
   savedPh('instantly-key', data.instantly_api_key_set, 'Enter your Instantly API key');
-  savedPh('reoon-key', data.reoon_api_key_set, '600 free/mo — reoon.com/email-verifier');
-  savedPh('zerobounce-key', data.zerobounce_api_key_set, '100 free/mo — best for M365/Workspace catch-alls');
-  savedPh('hunter-key', data.hunter_api_key_set, '50 free/mo + email-pattern lookup');
   savedPh('linkedin-password', data.linkedin_password_set, 'Enter password');
-  savedPh('cf-api-token', data.cloudflare_api_token_set, 'Your Cloudflare API Token');
 
   // Gmail auth status chip
   const g = document.getElementById('gmail-status');
@@ -1311,9 +1273,7 @@ async function loadSettings() {
     else if (data.m365_client_id) { m.className = 'email-tag risky'; m.textContent = 'sign in on Inboxes'; }
     else { m.className = 'email-tag guess'; m.textContent = 'not set up'; }
   }
-  tag('reoon-status', data.reoon_api_key_set, 'set');
-  tag('zerobounce-status', data.zerobounce_api_key_set, 'set');
-  tag('hunter-status', data.hunter_api_key_set, 'set');
+
 }
 
 function saveGmail() {
@@ -1350,17 +1310,7 @@ function saveMicrosoft() {
           'Saved. Now sign in on the Inboxes tab.').then(loadSettings);
 }
 
-function saveVerifiers() {
-  const payload = {};
-  const r = document.getElementById('reoon-key').value;
-  const z = document.getElementById('zerobounce-key').value;
-  const h = document.getElementById('hunter-key').value;
-  if (r) payload.REOON_API_KEY = r;
-  if (z) payload.ZEROBOUNCE_API_KEY = z;
-  if (h) payload.HUNTER_API_KEY = h;
-  if (!Object.keys(payload).length) { showToast('Enter at least one key first.', 'error'); return; }
-  saveEnv(payload, 'Verification keys saved.').then(loadSettings);
-}
+
 
 async function saveEnv(payload, okMsg) {
   const data = await api('/api/settings/env', {
@@ -1385,12 +1335,7 @@ function saveLinkedIn() {
   saveEnv(payload, 'LinkedIn credentials saved.');
 }
 
-function saveCloudflare() {
-  const payload = {CLOUDFLARE_ACCOUNT_ID: document.getElementById('cf-account-id').value.trim()};
-  const token = document.getElementById('cf-api-token').value.trim();
-  if (token) payload.CLOUDFLARE_API_TOKEN = token;
-  saveEnv(payload, 'Cloudflare credentials saved.');
-}
+
 
 async function testInstantly() {
   const key = document.getElementById('instantly-key').value.trim();
@@ -1479,18 +1424,14 @@ async function loadLogs() {
 // Calls today per subscription — each labelled with the provider it ran on.
 function brainCallChips(data) {
   const chip = (label, n) => '<span class="chip">' + label + ' calls today <b>' + escHtml(String(n || 0)) + '</b></span>';
-  const codex = data.codex_calls_today || 0;
+  const calls = data.calls_today || data.brain_calls_today || data.usage_today || 0;
   const st = data.brain_status || {};
-  // A paused brain must not look healthy: say so, and why.
   const paused = st.status === 'paused'
     ? '<span class="chip" title="' + escHtml(st.reason || '') + '">' +
-      escHtml(st.provider === 'codex' ? 'Codex' : 'Brain') + ' <b>paused</b>: ' +
+      'Brain <b>paused</b>: ' +
       escHtml((st.reason || '').slice(0, 120)) + '</span>'
     : '';
-  if (data.brain_provider === 'codex') {
-    return paused + chip('Codex', codex) + (data.claude_calls_today ? chip('Claude', data.claude_calls_today) : '');
-  }
-  return paused + chip('Claude', data.claude_calls_today) + (codex ? chip('Codex', codex) : '');
+  return paused + chip('Brain', calls);
 }
 
 function fmtTokens(n) {
@@ -1512,35 +1453,8 @@ function emailTag(p) {
     escHtml(m.label) + '</span>';
 }
 
-// Quota gauges for the ACTIVE provider only: Claude's are the numbers
-// `/usage` shows in Claude Code; Codex's are the ChatGPT plan's limits.
-// When they can't be read, say so rather than hiding the card.
 function quotaCardHtml(data) {
-  const provider = data && data.quota_provider;
-  if (!provider) return '';
-  const title = provider === 'codex' ? 'Codex (ChatGPT plan) Quota' : 'Claude Subscription Quota';
-  let html = '<h2>' + escHtml(title) + '</h2>';
-  if (!data.quota || !Object.keys(data.quota).length) {
-    const why = provider === 'codex'
-      ? "Quota unavailable: Sellbird couldn't read your ChatGPT plan's limits (check codex login, the Codex CLI version, and network)."
-      : "Quota unavailable: Sellbird couldn't read your Claude subscription's limits (check claude login and network).";
-    return html + '<p class="muted">' + escHtml(why) + ' Until it can, budgets count Sellbird\'s own calls.</p>';
-  }
-  const labels = {five_hour: '5-hour window', seven_day: 'Weekly', primary: 'Primary window',
-                  secondary: 'Secondary window', limit_reached: 'Usage limit reached'};
-  for (const [key, w] of Object.entries(data.quota)) {
-    const pct = Math.min(100, Math.max(0, w.utilization || 0));
-    const color = pct >= 80 ? 'yellow' : 'green';
-    const resets = w.resets_at ? 'resets ' + formatDate(w.resets_at) : '';
-    html += '<div class="progress-wrap">' +
-      '<div class="progress-label">' +
-        '<span class="text">' + escHtml(labels[key] || key) + (resets ? ' &middot; ' + escHtml(resets) : '') + '</span>' +
-        '<span class="pct">' + pct.toFixed(0) + '%</span>' +
-      '</div>' +
-      '<div class="progress-bar"><div class="progress-fill ' + color + '" style="width:' + pct + '%"></div></div>' +
-    '</div>';
-  }
-  return html;
+  return '<h2>Brain Status</h2><p class="muted">Local brain active. No external quota limits.</p>';
 }
 
 async function loadUsage() {
@@ -1609,10 +1523,10 @@ async function loadUsage() {
   const anyRows = (data.by_agent || []).length || (data.by_task || []).length;
   if (!anyRows) {
     tablesEl.innerHTML = emptyState(icon('usage'), 'No usage recorded yet',
-      'Once Sellbird starts making model calls (Claude or Codex), every one is logged here with exact calls and tokens by provider, agent and task.');
+      'Once Sellbird starts making model calls, every one is logged here with exact calls and tokens by provider, agent and task.');
   } else {
     const providers = data.by_provider || [];
-    const showProviders = providers.length > 1 || (providers.length === 1 && providers[0].provider !== 'claude');
+    const showProviders = providers.length > 1;
     tablesEl.innerHTML =
       (showProviders ? table('By Provider (30 days)', providers, 'Provider') : '') +
       table('By Agent (30 days)', data.by_agent, 'Agent') +
@@ -1721,7 +1635,6 @@ const CONTACT_SOURCES = {
   company_website: 'team page on their site',
   scraped_mailto: 'address published on their site',
   linkedin_search: 'LinkedIn search',
-  hunter_domain_search: 'Hunter domain search',
   job_board: 'job board',
   web_search: 'web search',
 };

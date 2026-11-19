@@ -94,13 +94,13 @@ def test_config_wrong_type_raises():
 def test_usage_and_channel_overrides():
     data = dict(MINIMAL)
     data["usage"] = {
-        "max_daily_claude_percent": 50,
+        "max_daily_percent": 50,
         "heartbeat_interval_minutes": 5,
         "quiet_hours": {"start": "23:00", "end": "06:00", "timezone": "UTC"},
     }
     data["channels"] = {"email": {"enabled": False, "max_daily_sends": 10}}
     config = SellbirdConfig(**data)
-    assert config.usage.max_daily_claude_percent == 50.0
+    assert config.usage.max_daily_percent == 50.0
     assert config.usage.heartbeat_interval_minutes == 5
     assert config.usage.quiet_hours.timezone == "UTC"
     assert config.channels.email.enabled is False
@@ -127,10 +127,10 @@ def test_quiet_hours_rejects_bad_timezone():
 
 def test_usage_rejects_out_of_range_percent():
     data = dict(MINIMAL)
-    data["usage"] = {"max_daily_claude_percent": 150}
+    data["usage"] = {"max_daily_percent": 150}
     with pytest.raises(ValidationError):
         SellbirdConfig(**data)
-    data["usage"] = {"max_daily_claude_percent": 0}
+    data["usage"] = {"max_daily_percent": 0}
     with pytest.raises(ValidationError):
         SellbirdConfig(**data)
 
@@ -163,14 +163,10 @@ def test_load_env_reads_environment(monkeypatch):
     # Don't read a developer's real .env — its keys would leak into the test.
     monkeypatch.setattr("sellbird.config.load_dotenv", lambda *a, **k: False)
     monkeypatch.setenv("INSTANTLY_API_KEY", "key-123")
-    monkeypatch.setenv("SERPER_API_KEY", "  serp-456  ")
-    monkeypatch.setenv("TINYFISH_API_KEY", "  tiny-789  ")
-    monkeypatch.delenv("HUNTER_API_KEY", raising=False)
+    monkeypatch.setenv("GMAIL_CLIENT_ID", "client-456")
     env = load_env()
     assert env.instantly_api_key == "key-123"
-    assert env.serper_api_key == "serp-456"
-    assert env.tinyfish_api_key == "tiny-789"
-    assert env.hunter_api_key == ""
+    assert env.gmail_client_id == "client-456"
 
 
 def test_env_config_rejects_non_string():

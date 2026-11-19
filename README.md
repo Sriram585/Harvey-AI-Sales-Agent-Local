@@ -7,7 +7,7 @@
   </a>
 </p>
 
-<p align="center"><strong>The open-source outreach platform that runs on your Claude or ChatGPT plan.</strong></p>
+<p align="center"><strong>The open-source outreach platform that runs on your local AI.</strong></p>
 
 <p align="center">
 Sellbird finds companies that need what you sell, finds the person who decides, checks their email address, writes each one a personal cold email, sends it and handles the replies.
@@ -70,11 +70,11 @@ Cycle complete. Sleeping for 15 minutes.
 
 ## No model API bill
 
-Sellbird thinks through the Claude Code CLI on your Claude Pro or Max plan, or through Codex on a ChatGPT plan. There's no API key and no per-token billing, and Sellbird throttles itself to leave room for your own work.
+Sellbird thinks through your local AI models. There are zero external API keys and zero per-token billing, running completely private on your hardware.
 
 | | |
 |---|---|
-| Claude Pro or Max, or a ChatGPT plan with Codex | the subscription you already have |
+| Local AI Model | completely free and private on your hardware |
 | Finding businesses | **$0** on the default source, or about $0.37 per 1,000 on the cheapest paid one |
 | Reading their websites | **$0**: three HTTP requests each, no model call |
 | Writing and sending | your subscription and a mailbox (about $7 a month for Google Workspace) |
@@ -87,21 +87,10 @@ How the loop, the budget and the isolation work: [How Sellbird works](docs/how-i
 You need:
 
 - **Python 3.11 or newer.** macOS ships 3.9, so run `brew install python@3.13` first if `python3 --version` says so.
-- **Claude Pro or Max** with the CLI signed in (`claude login`), or a **ChatGPT plan with the Codex CLI** ([Codex setup](docs/codex.md)).
+- **Local AI** running on your computer.
 - **A mailbox to send from**, ideally Google Workspace on a separate sending domain. [Microsoft 365](docs/microsoft365.md) and SMTP work too.
-- **Warmup on that mailbox.** We recommend [TrulyInbox](https://trulyinbox.com/?via=sellbird): it warms a new mailbox before cold email and keeps it out of spam after, and Sellbird reads its inbox rate to tell you when you're ready.
 
-### Let Claude set it up
-
-```bash
-git clone https://github.com/ethanplusai/sellbird.git
-cd sellbird
-claude
-```
-
-Then say **"set up Sellbird for me"**. The repo's `CLAUDE.md` turns Claude Code into the setup guide: it checks where you are, installs what's missing, asks what it needs and trains Sellbird on your product.
-
-### Or do it yourself
+### Setup
 
 ```bash
 # 1. Install. Use python3.13, not python3: on macOS bare python3 is 3.9.
@@ -180,9 +169,8 @@ database, the logs and the dashboard token.
 | [The dashboard and the data](docs/dashboard.md) | Every screen, how sign-in works, and how the data is stored |
 | [Configuration and commands](docs/configuration.md) | `.env`, `sellbird.yaml` and every command |
 | [Extensions](docs/extensions.md) | Adding routes, heartbeat steps and commands from a separate package |
-| [Using a ChatGPT plan (Codex)](docs/codex.md) | Running on Codex instead of Claude |
 | [Legal and deliverability](docs/deliverability.md) | The rules you're sending under, and warmup |
-| [Microsoft 365](docs/microsoft365.md) · [Precleared](docs/precleared.md) | Provider setup guides |
+| [Microsoft 365](docs/microsoft365.md) | Provider setup guides |
 | [Docker](docs/docker.md) · [Troubleshooting](docs/troubleshooting.md) · [Roadmap](docs/roadmap.md) | Running, fixing and what's next |
 
 ## Contributing
@@ -195,4 +183,3 @@ See [CHANGELOG.md](CHANGELOG.md) for what changed in each release, and [follow @
 
 Sellbird is licensed under the [GNU Affero General Public License v3.0](LICENSE). Harvey releases up to 0.3.x were released under MIT, and that code keeps its MIT notice in [NOTICE](NOTICE).
 
-TrulyInbox links in this project are affiliate links: the maintainer may earn a commission, at no extra cost to you.

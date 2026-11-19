@@ -992,7 +992,7 @@ MAX_PAGE_CHARS = 1_500_000   # a sane cap per page; real pages are far smaller
 
 def emails_on_page(html: str) -> list[str]:
     """Every address a page publishes, including the common obfuscations:
-    Cloudflare email protection, data-attribute pairs (data-front="rashby"
+    Email obfuscation protection, data-attribute pairs (data-front="rashby"
     data-back="ashbykerr.test"), "name [at] domain [dot] com", entities."""
     html = (html or "")[:MAX_PAGE_CHARS]
     found: list[str] = []

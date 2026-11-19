@@ -112,7 +112,7 @@ async def test_the_agent_can_pause_but_never_resume(core):
     ("POST", "/api/outbox/x/approve"), ("POST", "/api/outbox/approve-all"),
     ("POST", "/api/settings/env"), ("POST", "/api/signals/status"),
     ("POST", "/api/discover/run"), ("POST", "/api/sending-mode"),
-    ("POST", "/api/trulyinbox/connect"), ("GET", "/api/settings"),
+    ("GET", "/api/settings"),
     ("GET", "/api/sellbird/logs"), ("GET", "/api/export/prospects.csv"),
     ("POST", "/api/prospects/p1/opt-out/undo"), ("POST", "/api/sellbird/start"),
     ("POST", "/api/inboxes/x/resume"), ("POST", "/api/inboxes/x/cap"),

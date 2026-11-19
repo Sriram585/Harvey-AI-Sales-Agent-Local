@@ -40,11 +40,11 @@ minor versions can still change behaviour.
   online booking" is not passed on: a homepage read misses widgets that load
   late, and it called a bookable business unbookable too often.
   Those findings come from one page and can be wrong, so `writer.site_facts:
-  false` turns them off, and `CLAUDE.md` and the approval guide now tell
-  Claude to offer a browser check of each draft's claims before the user
+  false` turns them off, and `README.md` and the approval guide now tell
+  Local AI to offer a browser check of each draft's claims before the user
   approves.
-- **The cold-email check takes a sender based in any of Precleared's
-  fourteen countries.** `compliance.precleared.sender_country` accepts GB, US,
+- **The cold-email check takes a sender based in any of Compliance's
+  fourteen countries.** `compliance.compliance.sender_country` accepts GB, US,
   CA, DE, FR, AU, IE, NL, ES, IT, LV, AE, EG and QA (`UK`, `USA` and `UAE` are
   read as their codes), where it took only GB or US; `sellbird setup` asks for
   a two-letter code and lists them when the answer isn't one. A sender whose
@@ -60,7 +60,7 @@ minor versions can still change behaviour.
   refused; `""` leaves the line off on purpose. A link or an email address is
   still refused.
 - **An `unknown` answer from the cold-email check holds the email instead of
-  failing it.** Precleared answers `unknown` when a fact can't be established,
+  failing it.** Compliance answers `unknown` when a fact can't be established,
   usually the recipient's country, sometimes a register that was too slow.
   That email now waits in the Outbox with what would settle it (set
   `prospect_country`, or give the company a location or number) and is asked
@@ -114,7 +114,7 @@ minor versions can still change behaviour.
   remove one. See "Several sending inboxes" in
   [docs/configuration.md](docs/configuration.md).
 - **An MCP server for your coding agent.** `sellbird mcp install` adds
-  Sellbird to Claude Code (or Codex), showing the change first. The agent
+  Sellbird to Local AI (or Local AI), showing the change first. The agent
   reads everything Sellbird knows, estimates discovery costs and can pause
   sending, through the running dashboard with its own token
   (`data/agent-token`). Every approval, setting, key, purchase and resume
@@ -159,18 +159,18 @@ minor versions can still change behaviour.
   your edits. The Docker image sets `SELLBIRD_HOME=/app`. See "Where your
   files live" in the README.
 - **Verifier API keys stay out of logs** (from #185 by @techity-mushtaque).
-  Hunter's key now goes in the `X-API-KEY` header; Reoon and ZeroBounce only
+  Local Pattern's key now goes in the `X-API-KEY` header; Verifier and Verifier only
   take it in the URL, so the `httpx` and `httpcore` loggers stay at WARNING and
   Sellbird's own debug lines blank the key out of error text.
 - **`channels.email.min_write_score`** (default 0): the writer skips prospects
   scored below it. Scout also checks `compliance.do_not_contact` before
   reading a listed company's site or spending verification credits on it.
-- **A free Precleared key in one step** (from #121 by @gabrielaoimevbore-beep).
+- **A free Compliance key in one step** (from #121 by @gabrielaoimevbore-beep).
   `sellbird setup` now offers to get a free key for the cold-email check with
   just an email address, instead of sending people to a web page and back, and
-  `sellbird precleared-key` does the same later (`--email` asks nothing, for a
+  `sellbird compliance-key` does the same later (`--email` asks nothing, for a
   coding agent setting Sellbird up). The key is saved in `.env` as
-  `PRECLEARED_API_KEY` and never printed. When the keyless allowance (10 checks
+  `COMPLIANCE_API_KEY` and never printed. When the keyless allowance (10 checks
   a day) runs out, the Today page, `sellbird status` and the Outbox reason point
   to the command. Free keys now give 100 checks a day for their first 14 days,
   then 25, and the docs say so.
@@ -257,10 +257,10 @@ minor versions can still change behaviour.
   stops the Writer, so it never drafts in the shape you replaced. Unset,
   nothing changes.
 
-- **Scavio discovery providers** (`scavio_maps`, `scavio_search`). Google Maps
+- **Directory discovery providers** (`directory_maps`, `directory_search`). Google Maps
   listings around each city, with phone, website, category, rating and review
   count, and Google organic results with rank, both from one
-  `SCAVIO_API_KEY`. Maps is 1 credit per 20 businesses and Search 1 credit per
+  `DIRECTORY_API_KEY`. Maps is 1 credit per 20 businesses and Search 1 credit per
   10 results; estimates use the $0.01 pay-as-you-go credit price. Off unless
   you pick one in `harvey discover` or the dashboard. Closes #28.
 - **Sent emails on the Conversations tab.** A new *Awaiting reply* filter
@@ -279,13 +279,13 @@ minor versions can still change behaviour.
   `channels.email.signature.logo` sends Gmail, Microsoft 365 and SMTP email as
   HTML with the logo embedded. Off by default. An unusable logo holds approved
   email and says why on Today, rather than sending without it.
-- **TrulyInbox for warmup.** Harvey now recommends TrulyInbox for warming and
-  keeping sending mailboxes healthy, and reads it: `harvey trulyinbox connect`
+- **Warmup for warmup.** Harvey now recommends Warmup for warming and
+  keeping sending mailboxes healthy, and reads it: `harvey warmup connect`
   (or the new warmup step on the dashboard's setup checklist) checks a key and
   saves it, and `harvey warmup` then says whether the sending mailbox is
   actually warmed: enrolled, signed in, warmed for `min_days`, and under 5%
-  spam in its warmup mail. Read-only; it never changes anything in TrulyInbox.
-  `harvey trulyinbox other` records that you use another warmup service.
+  spam in its warmup mail. Read-only; it never changes anything in Warmup.
+  `harvey warmup other` records that you use another warmup service.
 - **A do-not-contact list, enforced at send time.** `compliance.do_not_contact`
   takes addresses and domains Harvey must never email: competitors, your
   existing customers, anyone under a legal hold, a partner you agreed not to
@@ -320,17 +320,17 @@ minor versions can still change behaviour.
   this asks whether you are allowed to approach one, and burying the second
   in the first is how a list that has grown too broad goes unnoticed.
 
-- **TinyFish as a free discovery source** (from #95). `harvey discover
-  --provider tinyfish` (or *TinyFish* on the Discover tab) finds businesses
-  by phrase with a free `TINYFISH_API_KEY`, no card, and runs the `yc`,
+- **Web Search as a free discovery source** (from #95). `harvey discover
+  --provider search` (or *Web Search* on the Discover tab) finds businesses
+  by phrase with a free `SEARCH_API_KEY`, no card, and runs the `yc`,
   `hiring`, `accelerator` and `funding` presets. Harvey paces it to its
   published limits, 30 searches a minute and 500 an hour, and a run that
   uses up the hour (or is refused the key) stops and says why instead of
   failing every remaining phrase. It records no
-  `SERP_RANK`: TinyFish's ordering isn't Google's and its search takes no
-  location, so rank signals still come from Serper or DataForSEO SERP, and
-  a TinyFish run never marks a business they ranked as gone. Scout also
-  searches through TinyFish when the key is set, after Serper.
+  `SERP_RANK`: Web Search's ordering isn't Google's and its search takes no
+  location, so rank signals still come from Web Search or Directory SERP, and
+  a Web Search run never marks a business they ranked as gone. Scout also
+  searches through Web Search when the key is set, after Web Search.
 
 - **Open roles from the job board a company actually uses.** When a
   company's own site links or embeds a Greenhouse, Lever, Ashby or Workable
@@ -348,15 +348,15 @@ minor versions can still change behaviour.
   agency or a VC portfolio page), are attributed to nobody. Sites without a
   board still get the careers-page read.
   The new `hiring` discovery preset (`harvey discover --preset hiring`, or
-  *Look for: Companies hiring for your roles*) searches through Serper or
-  DataForSEO SERP for companies whose own careers pages list your roles.
+  *Look for: Companies hiring for your roles*) searches through Web Search or
+  Directory SERP for companies whose own careers pages list your roles.
   `skills/signal_playbook.md` has a short section on using a posting as the
   hook: cite the role as posted, never guess salary or headcount, don't
   imply inside knowledge, mind the posting date.
 
-- **Find companies by where they rank in a city.** DataForSEO SERP now also
+- **Find companies by where they rank in a city.** Directory SERP now also
   records who holds the local 3-pack (`IN_LOCAL_PACK`, slot 1-3, ads
-  excluded), and a new **DataForSEO Google Maps** provider records each
+  excluded), and a new **Directory Google Maps** provider records each
   business's map position (`MAPS_RANK`) with its rating, category and
   claimed status, keeping businesses with no website by their place_id
   (`NO_WEBSITE`). Both search from the geocoded city centre. Every rank is
@@ -377,7 +377,7 @@ minor versions can still change behaviour.
   out once and stored on the prospect, from the company's location (US
   states, Canadian provinces, Australian states, countries with one zone or
   one main zone, and the coordinates discovery already cached), the country
-  Precleared returns when that check is on, or `prospect_country`. A code
+  Compliance returns when that check is on, or `prospect_country`. A code
   that is a state and a country too ("Mumbai, IN", "Adelaide, SA") is
   settled by those; with nothing else it reads as a US state. Anyone Harvey
   can't place gets the window in `usage.quiet_hours.timezone`. Follow-ups
@@ -391,7 +391,7 @@ minor versions can still change behaviour.
 
 - **A built-in skill for selling to YC startups.** The `yc` discovery preset
   (`harvey discover --preset yc`, or *Look for: YC startups* on Discover)
-  searches your industries, through Serper or DataForSEO SERP, for companies
+  searches your industries, through Web Search or Directory SERP, for companies
   whose own site says they're backed by Y Combinator. The new `YC_BACKED`
   signal tags them from their homepage or About page (a reference to their
   own YC page, or a line where they say it, never customer or audience
@@ -450,50 +450,50 @@ minor versions can still change behaviour.
   off), cold email still sends, and `harvey run`, `harvey status` and the
   Outbox tab warn until it's set. The opt-out line must ask for a reply
   Harvey recognises and can't contain a link. Based on #13 by Camilo Cruz.
-- **The Today page and `harvey status` say when Precleared is holding cold
+- **The Today page and `harvey status` say when Compliance is holding cold
   email.** When the check can't be made (its free checks for the day are used
   up, the key is out of checks, was rejected or is being rate limited, or
-  Precleared can't be reached), cold email to new addresses waits and replies
+  Compliance can't be reached), cold email to new addresses waits and replies
   still go out, but this used to reach only the log, so cold email just went
   out slower. Harvey now records the hold, and the Today page and
   `harvey status` say how many cold emails are waiting and what fixes it: a
-  free key, a pack for that key (the checkout link from Precleared's answer),
+  free key, a pack for that key (the checkout link from Compliance's answer),
   or nothing but time. The next fresh answer clears it, a hold not seen for a
   day is ignored, and switching the check off clears it. (from #57 by
   gabrielaoimevbore-beep)
 
 ### Changed
 
-- **Precleared is told the company's and person's names Harvey already has.**
+- **Compliance is told the company's and person's names Harvey already has.**
   For a UK address, cold email may go to a limited company's staff without
-  consent but not to a sole trader, so Precleared has to find the company
+  consent but not to a sole trader, so Compliance has to find the company
   behind the domain on the Companies House register. When the domain alone
   didn't find it, the answer was `consent_needed`, even for a company Harvey
   knew the name of. Harvey now sends `company_name` (the company record's
   name, else the prospect's company field) and `recipient_name` (the
   prospect's first and last name; none for a company inbox), which
-  Precleared uses to search the register and match the company's officers.
+  Compliance uses to search the register and match the company's officers.
   It doesn't store the person's name. The names join the cache fingerprint
   only when set: a cached `ok_to_email` stands when they first arrive, and
   any other cached verdict gets one fresh check with them.
-- **Precleared is told the recipient's country Harvey already knows.** The
+- **Compliance is told the recipient's country Harvey already knows.** The
   send window works out where a company is (a country, US state, Canadian
   province or Australian state in its location, or a code that is a state
   and a country too once the cached coordinates settle it); the compliance
-  check used to ask Precleared about the address with none of it, so
-  Precleared had to find the country again and, when it couldn't, answered
+  check used to ask Compliance about the address with none of it, so
+  Compliance had to find the country again and, when it couldn't, answered
   `unknown` and the email failed. Harvey now sends that country as
-  `recipient_country` when it is sure of it, which Precleared takes as
+  `recipient_country` when it is sure of it, which Compliance takes as
   settled. Nothing it is not sure of is sent: "Berlin, DE" with no
   coordinates reads as Delaware by convention and goes without a country,
   as do a bare city and coordinates alone. Without a certain country,
   `prospect_country` goes as the default, as before, and with that unset
   the one country every `icp.geography` entry is in now serves as that
-  default; Precleared uses a default only when its own lookups show
+  default; Compliance uses a default only when its own lookups show
   nothing. The country joins the cache fingerprint only when it is set, so
   cached verdicts are kept, and an address Harvey later becomes sure of is
-  re-checked once unless Precleared had found the same country itself.
-  `docs/precleared.md` describes the check in full.
+  re-checked once unless Compliance had found the same country itself.
+  `docs/compliance.md` describes the check in full.
 - **Setup comes first on Today.** Until setup is finished, the checklist sits at
   the top of the Today page as a "Finish setting up Harvey" card, with the next
   step highlighted, instead of at the bottom of the side column.
@@ -509,7 +509,7 @@ minor versions can still change behaviour.
   Founder, CEO). With `LIKELY_OWNER` confirmed, each owner is recorded with
   its evidence.
 - **Email patterns come from the addresses a site publishes**, including
-  ones hidden behind Cloudflare email protection or a mail link's `data-`
+  ones hidden behind CDN email protection or a mail link's `data-`
   attributes, matched to the people the site names. A lone ambiguous
   address (`kmorrow@`) teaches nothing, and an address another named person
   could own (`jsmith@` with both John and Jane Smith there) is never guessed
@@ -583,7 +583,7 @@ minor versions can still change behaviour.
 
 - **The dashboard's Start and Stop work, on Windows and everywhere else.**
   Start launched `python -m harvey` with no command, so the loop printed the
-  help and exited; it now runs `harvey run`, and finds `claude` in
+  help and exited; it now runs `harvey run`, and finds `local` in
   `~/.local/bin` when the native installer left it off PATH. On Windows the
   "is it running?" check was `os.kill(pid, 0)`, which there terminates the
   process it asks about, and a stale PID file made the status and Start
@@ -628,13 +628,13 @@ minor versions can still change behaviour.
   own domain, never a shared one like gmail.com or rr.com. Instantly
   campaigns Harvey creates turn on Instantly's own `stop_for_company`.
 
-- **DataForSEO SERP sends a location.** It sent only a keyword, but
-  DataForSEO requires a location on every task, so searches failed or came
+- **Directory SERP sends a location.** It sent only a keyword, but
+  Directory requires a location on every task, so searches failed or came
   back un-localised. It now sends the geocoded city point, or a
   "Denver,Colorado,United States" location name, or the United States for
   searches with no city. "No search results" is now an empty answer rather
   than an error; other task errors still stop that query and are reported.
-- **DataForSEO SERP estimates were 3.3x low.** They used the standard-queue
+- **Directory SERP estimates were 3.3x low.** They used the standard-queue
   price ($0.0006 per 10 results); Harvey calls the Live endpoint ($0.002),
   so a depth-30 search is $0.006, not $0.0018. Harvey stays on Live: it's
   synchronous, so the spend cap checked between searches sees real spend.
@@ -646,7 +646,7 @@ minor versions can still change behaviour.
   or takes a customer quoted in a testimonial for the owner.
 - **A cached default email pattern no longer blocks better evidence.** A
   first.last@ guess cached for a domain used to be read first forever, so
-  neither a real address nor a Hunter lookup could replace it. Hunter is
+  neither a real address nor a Local Pattern lookup could replace it. Local Pattern is
   asked once per domain, and `j.smith@` is no longer read as first.last@.
 - **The company-inbox fallback finds published inboxes it used to miss**: it
   reads whole pages (an `info@` 140k characters into a page counted for
@@ -656,7 +656,7 @@ minor versions can still change behaviour.
 - **reCAPTCHA no longer makes a site look blocked.** Any page mentioning
   "captcha" in its first 4,000 characters counted as a block, which cost
   Harvey every site with a protected contact form. Only real challenge
-  pages count now, and a SiteGround or Cloudflare challenge is reported as
+  pages count now, and a SiteGround or CDN challenge is reported as
   challenged (not unreachable) without retrying every URL variant.
 - **Gmail reads replies in the charset they were written in** (from #58 by
   xiaoheiai4719-collab). Every reply was decoded as UTF-8, so a reply sent
@@ -732,7 +732,7 @@ minor versions can still change behaviour.
   locale code page, so `harvey train` no longer crashes on characters like
   "★" and prompts aren't garbled; command output is UTF-8 too, so the
   dashboard's log of `harvey run` can't crash on "⚠". An npm install's
-  `claude.cmd` shim is resolved to the native `claude.exe` it wraps and is
+  `local.cmd` shim is resolved to the native `local.exe` it wraps and is
   never run through cmd.exe, which would re-parse Harvey's isolation flags;
   if the executable is missing, Harvey says how to fix it. Files an older
   Harvey saved in the Windows code page (trained skills, harvey.yaml) still
@@ -777,7 +777,7 @@ minor versions can still change behaviour.
 - Protect the local dashboard with an access token, restrict requests to trusted
   local origins, and save settings with owner-only permissions. Update and restart
   Harvey, then open the dashboard link printed in your terminal.
-- Isolate Claude calls from personal instructions and hooks, and fix Claude CLI
+- Isolate Local AI calls from personal instructions and hooks, and fix Local AI CLI
   installation in Docker. Thanks to @EICCIO-Advisors for the private report.
 
 ### Added
@@ -812,12 +812,12 @@ minor versions can still change behaviour.
   days of the inbox without marking anything read, refuses to act as any
   mailbox other than `persona.email`, and holds sending when the inbox can't
   be read. See [docs/microsoft365.md](docs/microsoft365.md).
-- **Optional per-recipient compliance check (Precleared).** Set
-  `compliance.precleared.enabled: true` with `sender_country: GB` or `US` to
+- **Optional per-recipient compliance check (Compliance).** Set
+  `compliance.compliance.enabled: true` with `sender_country: GB` or `US` to
   have each new recipient checked before the first cold email against UK
   PECR, US CAN-SPAM, Canada's CASL, Germany's UWG and France's rules. Any
   verdict but `ok_to_email` fails that outbox item with the rule and the next
-  step. If the check can't be made because of Precleared (daily allowance or
+  step. If the check can't be made because of Compliance (daily allowance or
   rate limit, a bad key, network down, an unreadable answer), new addresses
   wait for a later cycle while email to people already cleared, and replies,
   still go out; if it fails for one address, only that email is moved back
@@ -828,15 +828,15 @@ minor versions can still change behaviour.
   sender country, address source or product description triggers a fresh
   check. The receipt id is logged with each send. Native providers only. Off
   by default.
-- **`harvey setup` offers the Precleared check** (from #46 by
+- **`harvey setup` offers the Compliance check** (from #46 by
   gabrielaoimevbore-beep). A new optional last step
   asks whether to turn the check on, where your business is based (GB or US)
   and, if your prospects are all in one country, which one (answering "no"
   there asks before saving it as Norway's code). It then offers a
-  free `PRECLEARED_API_KEY` (hidden input, saved to `.env`; 25 checks a day
+  free `COMPLIANCE_API_KEY` (hidden input, saved to `.env`; 25 checks a day
   instead of 10). Off unless you say yes. Re-running setup offers your saved
   answers as the defaults, so pressing Enter never switches the check off. The
-  Claude-guided setup in CLAUDE.md offers the same step. Setup now reads and
+  Local AI-guided setup in README.md offers the same step. Setup now reads and
   saves `harvey.local.yaml` when it exists (it's what `harvey train` writes,
   and the file Harvey reads), not the `harvey.yaml` it shadows, so its answers
   take effect; if it can't save the file it says so instead of ticking the
@@ -854,31 +854,31 @@ minor versions can still change behaviour.
 
 ### Added
 
-- **Opt-in Codex brain (ChatGPT plan).** Set `brain.provider: codex` (or pick
-  it in `harvey setup`, or `harvey train --provider codex`) to think with the
-  Codex CLI on a ChatGPT subscription instead of Claude. Claude remains the
+- **Opt-in Local AI brain (ChatGPT plan).** Set `brain.provider: local` (or pick
+  it in `harvey setup`, or `harvey train --provider local`) to think with the
+  Local AI CLI on a ChatGPT subscription instead of Local AI. Local AI remains the
   default and there is no automatic fallback between providers. Each call
-  runs a throwaway, isolated `codex app-server` with no tools; Harvey verifies
-  the lockdown from Codex's own reports before sending any prompt, aborts on
+  runs a throwaway, isolated `local app-server` with no tools; Harvey verifies
+  the lockdown from Local AI's own reports before sending any prompt, aborts on
   any attempted tool use, refuses API-key logins and custom endpoints
-  (checked before your login is exposed to Codex), and never changes your own
-  Codex settings or login: each call gets a private copy of the login without
-  its refresh token, so an expired login must be renewed with Codex itself or
-  `codex login`. Requires Codex CLI 0.159.3; other versions are refused. See
-  the README section "Using a ChatGPT plan instead (Codex)".
+  (checked before your login is exposed to Local AI), and never changes your own
+  Local AI settings or login: each call gets a private copy of the login without
+  its refresh token, so an expired login must be renewed with Local AI itself or
+  `local login`. Requires Local AI CLI 0.159.3; other versions are refused. See
+  the README section "Using a ChatGPT plan instead (Local AI)".
 - `brain.model` picks the model for either provider, for Harvey only. For
-  Codex use `gpt-5.5` (suggested by `harvey setup`): the verified text-only
+  Local AI use `gpt-5.5` (suggested by `harvey setup`): the verified text-only
   model. Blank auto-selection only picks listed models without code-execution
   tools, and on current ChatGPT accounts there are none; code-mode models are
   refused.
-- If Codex can't be used (expired or renewal-due login, unsupported CLI,
-  unsafe Codex config, rejected model, plan usage limit), Harvey pauses the
+- If Local AI can't be used (expired or renewal-due login, unsupported CLI,
+  unsafe Local AI config, rejected model, plan usage limit), Harvey pauses the
   heartbeat instead of running agents that would fail: replies stay unread
   and unescalated, queued emails wait, and the reason shows in the log,
   `harvey status` and the dashboard. It resumes on its own once the cause is
   fixed. `harvey status --check` runs the same check (no prompt sent) on demand
-  and exits non-zero when it fails. The Codex provider supports macOS and
-  Linux; it is refused on Windows (use Claude there).
+  and exits non-zero when it fails. The Local AI provider supports macOS and
+  Linux; it is refused on Windows (use Local AI there).
 
 ### Changed
 
@@ -887,14 +887,14 @@ minor versions can still change behaviour.
   mailbox every cycle, so a reply always cancels its queued follow-ups before
   that cycle's sends (previously the two could run at the same time, and a
   reply arriving with no open conversation waited for a later cycle). This
-  applies to Claude and Codex alike.
+  applies to Local AI and Local AI alike.
 - A reply is only recorded once its reply draft (if it needs one) is
   written, so a brain outage part-way never half-records it. If a working
   brain returns no usable draft, the conversation is flagged for a human
   instead of being left open with no answer.
 - Usage is tracked per provider. The budget gate, `harvey usage`, `harvey
   status` and the dashboard read and label the active provider's own quota;
-  existing usage history is kept and attributed to Claude.
+  existing usage history is kept and attributed to Local AI.
 
 ### Fixed
 
@@ -907,10 +907,10 @@ A security release. Update if you run Harvey.
 
 ### Security
 
-- **Claude now runs with no tools.** Every Claude call used to run with
+- **Local AI now runs with no tools.** Every Local AI call used to run with
   `--dangerously-skip-permissions`, and prompts include text Harvey doesn't
   control: prospect email replies and scraped web pages. Instructions hidden
-  in that text could make Claude run commands, read or write files, or use
+  in that text could make Local AI run commands, read or write files, or use
   the operator's connected MCP servers. Calls now run with `--tools ""` and
   `--strict-mcp-config`; Harvey only ever needed text back, so nothing else
   changes. Reported privately by [@hackchang](https://github.com/hackchang).
@@ -935,8 +935,8 @@ A security release. Update if you run Harvey.
 ### Added
 
 - Contacts are backfilled for companies found without any, from their own team
-  pages and, if a key is set, Hunter's named-people search.
-- `HUNTER_MONTHLY_SEARCHES` (default 25) sets one Hunter budget shared by every
+  pages and, if a key is set, Local Pattern's named-people search.
+- `MONTHLY_SEARCHES` (default 25) sets one Local Pattern budget shared by every
   domain search.
 
 Thanks to [@sshaw0729-dotcom](https://github.com/sshaw0729-dotcom) for the
@@ -983,7 +983,7 @@ a paid third-party platform to send at all. Both are fixed.
 - **Bounce handling and a kill switch.** A bounce marks the address invalid,
   cancels that prospect's queued sends, and trips a global pause past a
   configured bounce rate. `harvey sending pause|resume`.
-- **Claude usage tracking.** Per-call attribution by agent, task and model, plus
+- **Local AI usage tracking.** Per-call attribution by agent, task and model, plus
   live subscription-quota gauges read the same way `/usage` does, so Harvey
   throttles itself and leaves headroom for your own interactive work.
   `harvey usage`.
@@ -1026,7 +1026,7 @@ a paid third-party platform to send at all. Both are fixed.
   row existing, so "companies running Google Ads" silently meant "companies we
   checked for Google Ads", which was all of them. Cohorts now read the newest
   observation per company and signal, and require it to be true.
-- **Usage tracking counted every Claude session on the machine**, not just
+- **Usage tracking counted every Local AI session on the machine**, not just
   Harvey's. The transcript reconciler is gone; the ledger contains only rows
   Harvey's own Brain wrote.
 - **Page titles were being extracted as people** ("Request Service", "Commercial

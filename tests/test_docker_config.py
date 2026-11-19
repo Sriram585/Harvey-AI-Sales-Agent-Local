@@ -39,17 +39,17 @@ def test_setup_and_atomic_training_saves_survive_reloading(tmp_path, monkeypatch
     base = tmp_path / "sellbird.yaml"
     base.write_text((PROJECT_ROOT / "sellbird.yaml").read_text())
     env = tmp_path / ".env"
-    env.write_text("SERPER_API_KEY=fixture_original\n")
+    env.write_text("GMAIL_CLIENT_ID=fixture_original\n")
     monkeypatch.setattr(setup, "CONFIG_FILE", base)
     monkeypatch.setattr(setup, "ENV_FILE", env)
     monkeypatch.setattr(dashboard, "ENV_FILE", env)
     wizard = setup.SetupWizard()
-    wizard.env_vars = {"SERPER_API_KEY": "fixture_setup"}
-    wizard.config = {"usage": {"max_daily_claude_percent": 7}}
+    wizard.env_vars = {"GMAIL_CLIENT_ID": "fixture_setup"}
+    wizard.config = {"usage": {"max_daily_percent": 7}}
     wizard._write_env()
     wizard._write_config()
     assert wizard.config_saved
-    dashboard._write_env_file({"SERPER_API_KEY": "fixture_dashboard"})
+    dashboard._write_env_file({"GMAIL_CLIENT_ID": "fixture_dashboard"})
     learned = yaml.safe_load(base.read_text())
     learned["product"]["name"] = "Fixture Product"
     local = tmp_path / "sellbird.local.yaml"
@@ -57,5 +57,5 @@ def test_setup_and_atomic_training_saves_survive_reloading(tmp_path, monkeypatch
     learned["product"]["name"] = "Fixture Updated"
     write_trained_config(learned, local)
     assert load_config(str(local)).product.name == "Fixture Updated"
-    assert load_config(str(local)).usage.max_daily_claude_percent == 7
-    assert "SERPER_API_KEY=fixture_dashboard" in env.read_text()
+    assert load_config(str(local)).usage.max_daily_percent == 7
+    assert "GMAIL_CLIENT_ID=fixture_dashboard" in env.read_text()

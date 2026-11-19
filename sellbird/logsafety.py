@@ -1,7 +1,6 @@
 """Keep credentials out of Sellbird's log.
 
-Some vendors take the API key in the query string (Hunter, Reoon,
-ZeroBounce), and httpx logs every request URL at INFO. A log the dashboard
+Some services take credentials in the query string, and httpx logs every request URL at INFO. A log the dashboard
 shows (data/sellbird.log) would put a key in a URL on screen. Two layers: httpx and httpcore only log warnings, and the
 log file's handler masks any query value whose name looks like a secret.
 """

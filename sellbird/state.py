@@ -106,11 +106,10 @@ def _company_answered(p: str) -> str:
 AUTOPILOT_OFF_REASON = "waiting for you: autopilot was turned off before it went out"
 # Outbox error on an approved cold email the compliance check couldn't answer
 # for: it was moved back and is tried again then (sender: _retry_later).
-RECHECK_PREFIX = "Precleared couldn't check this address; trying again after "
-# Outbox error on an approved cold email Precleared answered "unknown" for (a
-# fact it couldn't establish): moved back and asked again then, with what
-# would settle it (sender: _retry_later).
-UNKNOWN_HOLD_PREFIX = "Precleared couldn't settle this address; trying again after "
+RECHECK_PREFIX = "Compliance couldn't check this address; trying again after "
+# Outbox error on an approved cold email compliance answered "unknown" for:
+# moved back and asked again then, with what would settle it (sender: _retry_later).
+UNKNOWN_HOLD_PREFIX = "Compliance couldn't settle this address; trying again after "
 # Both notes mean "moved back by the check", and are cleared the same way.
 MOVED_BACK_PREFIXES = (RECHECK_PREFIX, UNKNOWN_HOLD_PREFIX)
 # Outbox errors starting with this: the send was cut off and the email may
@@ -233,7 +232,7 @@ MIGRATIONS: list[str] = [
     CREATE TABLE IF NOT EXISTS usage_log (
         id TEXT PRIMARY KEY,
         date TEXT UNIQUE,
-        claude_calls INTEGER DEFAULT 0,
+        calls INTEGER DEFAULT 0,
         usage_percent REAL DEFAULT 0.0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
@@ -463,7 +462,7 @@ MIGRATIONS: list[str] = [
     """
     -- The best prospect for anyone selling websites is a business that has
     -- none, so `domain` cannot be the only identity key. `external_id` holds
-    -- the provider's stable id ("dataforseo:ChIJ...", "osm:node/123") and is
+    -- the provider's stable id ("external:ChIJ...", "osm:node/123") and is
     -- what dedups a re-run for those records.
     ALTER TABLE companies ADD COLUMN external_id TEXT DEFAULT '';
     ALTER TABLE companies ADD COLUMN phone TEXT DEFAULT '';
@@ -500,15 +499,10 @@ MIGRATIONS: list[str] = [
         SELECT DISTINCT company_id FROM observations WHERE collector = 'profile'
     );
     """,
-    # ── v11: which subscription each call ran on (claude | codex) ──
+    # ── v11: which provider each call ran on ──
     """
-    -- Every row before this migration was a Claude call.
-    ALTER TABLE usage_events ADD COLUMN provider TEXT DEFAULT 'claude';
+    ALTER TABLE usage_events ADD COLUMN provider TEXT DEFAULT 'local';
     CREATE INDEX IF NOT EXISTS idx_usage_events_provider ON usage_events(provider);
-
-    -- claude_calls keeps meaning Claude calls; Codex calls count separately
-    -- so one subscription's budget never consumes the other's.
-    ALTER TABLE usage_log ADD COLUMN codex_calls INTEGER DEFAULT 0;
     """,
     # ── v12: look actions up by type (opt-out history, undone opt-outs) ──
     """
@@ -560,8 +554,8 @@ MIGRATIONS: list[str] = [
     """,
 ]
 
-BRAIN_PROVIDERS = ("claude", "codex")
-_USAGE_LOG_COLUMN = {"claude": "claude_calls", "codex": "codex_calls"}
+BRAIN_PROVIDERS = ("local",)
+_USAGE_LOG_COLUMN = {"local": "calls"}
 
 # When a company was last profiled: the newer of the explicit check stamp
 # (set on every attempt, reachable or not) and its latest profile observation
@@ -2607,7 +2601,7 @@ class StateManager:
 
     # ── Usage Tracking ──
 
-    async def get_usage_today(self, provider: str = "claude") -> int:
+    async def get_usage_today(self, provider: str = "local") -> int:
         """Brain calls made today on one provider's subscription."""
         column = _USAGE_LOG_COLUMN[provider]
         today = date.today().isoformat()
@@ -2618,7 +2612,7 @@ class StateManager:
                 row = await cursor.fetchone()
                 return (row[0] or 0) if row else 0
 
-    async def increment_usage(self, provider: str = "claude"):
+    async def increment_usage(self, provider: str = "local"):
         column = _USAGE_LOG_COLUMN[provider]
         today = date.today().isoformat()
         async with self._connect() as db:
@@ -2650,7 +2644,7 @@ class StateManager:
         is_error: bool = False,
         source: str = "result_json",
         created_at: str | None = None,
-        provider: str = "claude",
+        provider: str = "local",
     ) -> bool:
         """Insert one usage row (one model within one brain call).
 
@@ -2781,11 +2775,10 @@ class StateManager:
             ) as cursor:
                 auto_reply_handoffs = (await cursor.fetchone())[0]
             async with db.execute(
-                "SELECT claude_calls, codex_calls FROM usage_log WHERE date = ?", (today,)
+                "SELECT calls FROM usage_log WHERE date = ?", (today,)
             ) as cursor:
                 usage_row = await cursor.fetchone()
                 usage_today = (usage_row[0] or 0) if usage_row else 0
-                codex_today = (usage_row[1] or 0) if usage_row else 0
 
         return {
             "prospects": prospect_counts,
@@ -2802,11 +2795,11 @@ class StateManager:
             "sending_paused": bool(await self.get_setting("sending_paused")),
             "open_conversations": open_conversations,
             "auto_reply_handoffs": auto_reply_handoffs,
-            "usage_today": usage_today,  # Claude calls (kept for compatibility)
-            "usage_today_by_provider": {"claude": usage_today, "codex": codex_today},
+            "usage_today": usage_today,
+            "usage_today_by_provider": {"local": usage_today},
             # Companies discovered but not yet read. The heartbeat profiles
             # these every cycle — it is free, so it never competes with the
-            # Claude budget the rest of the loop is rationing.
+            # brain budget the rest of the loop is rationing.
             "unprofiled": await self.count_companies_needing_profile(),
         }
 

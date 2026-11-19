@@ -243,7 +243,7 @@ def build_server(client_factory: Callable[[], CoreClient] = default_client, *,
 
     @server.tool()
     async def usage() -> dict:
-        """How much of the Claude or Codex subscription Sellbird has used, and its own calls."""
+        """Brain usage and call statistics."""
         return await read("/api/usage")
 
     @server.tool()

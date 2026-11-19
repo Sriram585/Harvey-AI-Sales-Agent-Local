@@ -33,7 +33,7 @@ The sidebar is grouped by what you're doing: **Work** (what needs you), **Pipeli
 - **Campaigns** — each sequence Sellbird wrote, who it's going to, and per-campaign feedback for the writer
 
 **System**
-- **Activity**, **Usage**, **Controls**, **Settings**, **Help**. Usage shows Claude or Codex quota gauges and per-agent token counts, with no dollar figures: you're on a subscription and aren't billed per token, so showing costs would be made up.
+- **Activity**, **Usage**, **Controls**, **Settings**, **Help**. Usage shows Local AI or Local AI quota gauges and per-agent token counts, with no dollar figures: you're on a subscription and aren't billed per token, so showing costs would be made up.
 
 | Outbox | Conversations |
 |---|---|

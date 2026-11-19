@@ -142,7 +142,7 @@ def keychain(monkeypatch):
 
 
 SMTP = {"address": "Three@Side.co", "name": "Ethan", "smtp_host": "smtp.side.co",
-        "password": "hunter2-secret"}
+        "password": "dummy_pass_123-secret"}
 
 
 def test_the_user_connects_an_smtp_inbox_and_no_password_comes_back(env, keychain):
@@ -152,7 +152,7 @@ def test_the_user_connects_an_smtp_inbox_and_no_password_comes_back(env, keychai
         body = r.json()
         assert body["success"] and body["address"] == "three@side.co" and body["test_ok"]
         listed = c.get("/api/inboxes").text
-    assert "hunter2-secret" not in r.text and "hunter2-secret" not in listed
+    assert "dummy_pass_123-secret" not in r.text and "dummy_pass_123-secret" not in listed
     assert "three@side.co" in listed
     row = asyncio.run(env["store"].get_mailbox_by_address("three@side.co"))
     assert row["connection"] == "smtp" and row["display_name"] == "Ethan"

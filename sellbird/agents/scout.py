@@ -1,16 +1,12 @@
 """Scout — DIY prospecting without expensive tools.
 
-Architecture: Python does ALL web searching/scraping. Claude only
+Architecture: Python does ALL web searching/scraping. The Brain only
 analyzes, scores, and personalizes data that Python already found.
-This avoids model-level refusals when asking Claude to research
-real people/companies.
 
 Search backends (in priority order):
-1. SERP API (Serper.dev) — if SERPER_API_KEY is set, reliable and fast
-2. TinyFish Search API — if TINYFISH_API_KEY is set (free, 30 searches a minute)
-3. DuckDuckGo HTML — free, no rate limiting, good fallback
-4. Bing — free, less aggressive than Google
-5. Google — aggressive rate limiting, used last
+1. DuckDuckGo HTML — free, no rate limiting, good fallback
+2. Bing — free, less aggressive than Google
+3. Google — aggressive rate limiting, used last
 
 Each cycle runs 2-3 queries max to avoid rate limits. Queries are
 tracked in the DB so they spread across heartbeat cycles.
@@ -66,9 +62,6 @@ SCRAPE_TIMEOUT = 12.0
 MAX_RETRIES = 3
 BACKOFF_BASE = 1.5  # seconds; grows exponentially per attempt
 MAX_RESULTS_PER_QUERY = 20
-# Serper free accounts reject num > 10 with HTTP 400
-# "Query pattern not allowed for free accounts" (verified 2026-10-26).
-SERPER_MAX_NUM = 10
 MAX_COMPANIES_PER_CYCLE = 10
 
 # Reading a company's site: the homepage, then up to five pages its own menu
@@ -88,7 +81,7 @@ MAX_CONTACTS_PER_COMPANY = 2
 # source. Otherwise first.last@, and verification decides. (first@ also
 # collides as a company grows: two Johns.)
 SMALL_COMPANY_MAX = 20
-LOCAL_BUSINESS_SOURCES = ("discover:osm", "discover:dataforseo_listings")
+LOCAL_BUSINESS_SOURCES = ("discover:osm",)
 
 # Company-inbox fallback: pages that publish a general address, and the
 # only mailboxes it will use, most likely read by the owner first. An
@@ -99,12 +92,6 @@ INBOX_PREFERRED = ("owner", "office", "info", "contact", "contactus", "hello",
                    "team", "service", "sales", "estimates", "quotes",
                    "inquiries", "enquiries", "admin", "support")
 MAX_PROSPECTS_PER_CYCLE = 25
-
-# Hunter domain-searches per heartbeat. The monthly budget itself is shared
-# with email-pattern lookups and set by HUNTER_MONTHLY_SEARCHES (see
-# integrations/email_finder.py); this just paces it, since a heartbeat every
-# 15 minutes would spend a free-tier month in a few hours otherwise.
-HUNTER_DOMAINS_PER_CYCLE = 1
 
 # Rotate a small pool of realistic desktop user-agents. Scrapers that always
 # send one UA are trivially fingerprinted and blocked.
@@ -172,16 +159,9 @@ class Scout:
 
         # Each strategy is isolated so one failing does not abort the cycle.
         strategies = []
-        # Hunter first, if configured: real named people with a real
-        # verification verdict beats a scrape guess, but the free tier's
-        # monthly budget (HUNTER_MONTHLY_SEARCHES, 25 by default) is small —
-        # self-skips once it's spent.
-        strategies.append(("hunter", self._prospect_via_hunter))
-        # Backfill next: companies already on file (e.g. from `sellbird
+        # Backfill: companies already on file (e.g. from `sellbird
         # discover`) but with zero prospects. Scrapes each company's own
-        # site directly, so it costs no search-query budget and isn't at
-        # the mercy of Serper/Bing flakiness — cheapest, most reliable win
-        # available before spending any queries.
+        # site directly.
         strategies.append(("known_companies", self._prospect_via_known_companies))
         if self.config.channels.linkedin.enabled and self.env.linkedin_email:
             strategies.append(("linkedin", self._prospect_via_linkedin))
@@ -305,8 +285,7 @@ class Scout:
         return host.lower().split(":")[0].removeprefix("www.")
 
     def challenged(self, domain: str) -> bool:
-        """True when the site answered with a bot challenge (SiteGround's
-        202, Cloudflare's "Just a moment...") — reachable, but not to us."""
+        """True when the site answered with a bot challenge — reachable, but not to us."""
         return self._host(domain) in getattr(self, "_challenged", set())
 
     async def _fetch(
@@ -392,7 +371,7 @@ class Scout:
         """Search the web using the best available backend.
 
         Returns list of (url, snippet) tuples.
-        Tries backends in order: Serper API → TinyFish Search API → DuckDuckGo → Bing → Google.
+        Tries backends in order: DuckDuckGo → Bing → Google.
         """
         if self._queries_this_cycle >= MAX_QUERIES_PER_CYCLE:
             logger.info("Scout: Query limit reached for this cycle. Will continue next cycle.")
@@ -404,18 +383,11 @@ class Scout:
         if self._queries_this_cycle > 1:
             await asyncio.sleep(random.uniform(*SEARCH_DELAY))
 
-        serper_key = getattr(self.env, "serper_api_key", "") or ""
-        tinyfish_key = getattr(self.env, "tinyfish_api_key", "") or ""
-        backends = []
-        if serper_key:
-            backends.append(lambda: self._search_serper(query, serper_key))
-        if tinyfish_key:
-            backends.append(lambda: self._search_tinyfish(query, tinyfish_key))
-        backends.extend([
+        backends = [
             lambda: self._search_duckduckgo(query),
             lambda: self._search_bing(query),
             lambda: self._search_google(query),
-        ])
+        ]
 
         for backend in backends:
             try:
@@ -443,62 +415,6 @@ class Scout:
             seen.add(norm)
             out.append((url, snippet))
         return out
-
-    async def _search_serper(self, query: str, api_key: str) -> list[tuple[str, str]]:
-        """Search via Serper.dev API — most reliable, $5/mo for 2.5k searches."""
-        resp = await self._fetch(
-            "https://google.serper.dev/search",
-            method="POST",
-            json_body={"q": query, "num": min(MAX_RESULTS_PER_QUERY, SERPER_MAX_NUM)},
-            headers={"X-API-KEY": api_key, "Content-Type": "application/json"},
-            retries=2,
-        )
-        if resp is None:
-            return []
-        try:
-            data = resp.json()
-        except (json.JSONDecodeError, ValueError) as e:
-            logger.debug(f"Serper returned non-JSON: {e}")
-            return []
-        if not isinstance(data, dict):
-            return []
-
-        results = []
-        for item in data.get("organic", []) or []:
-            if not isinstance(item, dict):
-                continue
-            url = item.get("link", "") or ""
-            snippet = item.get("snippet", "") or ""
-            if url:
-                results.append((url, snippet))
-        return results[:MAX_RESULTS_PER_QUERY]
-
-    async def _search_tinyfish(self, query: str, api_key: str) -> list[tuple[str, str]]:
-        """Search via TinyFish Search API (free with a key, 30 searches a minute)."""
-        resp = await self._fetch(
-            f"https://api.search.tinyfish.ai?query={quote_plus(query)}",
-            headers={"X-API-Key": api_key, "Accept": "application/json"},
-            retries=2,
-        )
-        if resp is None:
-            return []
-        try:
-            data = resp.json()
-        except (json.JSONDecodeError, ValueError) as e:
-            logger.debug(f"TinyFish returned non-JSON: {e}")
-            return []
-        if not isinstance(data, dict):
-            return []
-
-        results = []
-        for item in data.get("results", []) or []:
-            if not isinstance(item, dict):
-                continue
-            url = item.get("url", "") or ""
-            snippet = item.get("snippet", "") or ""
-            if url:
-                results.append((url, snippet))
-        return results[:MAX_RESULTS_PER_QUERY]
 
     async def _search_duckduckgo(self, query: str) -> list[tuple[str, str]]:
         """Search via DuckDuckGo HTML — free, no rate limiting."""
@@ -587,107 +503,6 @@ class Scout:
         if results:
             logger.debug(f"Google returned {len(results)} results")
         return results[:MAX_RESULTS_PER_QUERY]
-
-    # ── Strategy -1: Hunter named contacts (quota-gated) ──
-
-    _HUNTER_STATUS_MAP = {
-        "valid": "verified",
-        "accept_all": "risky",
-        "invalid": "invalid",
-        "disposable": "invalid",
-    }
-
-    async def _prospect_via_hunter(self) -> int:
-        """Pull Hunter's actual named-people data for companies with zero
-        prospects — real name/title/email/verification, not a scrape guess.
-
-        Draws from the same rotating pool as the team-page backfill, but at
-        a much smaller pace and against the shared monthly Hunter budget.
-        """
-        api_key = getattr(self.env, "hunter_api_key", "") or ""
-        if not api_key:
-            return 0
-
-        from sellbird.integrations.email_finder import (
-            hunter_domain_people, hunter_searches_remaining, record_hunter_search,
-        )
-
-        remaining = await hunter_searches_remaining(self.state)
-        if remaining <= 0:
-            return 0
-
-        batch_size = min(remaining, HUNTER_DOMAINS_PER_CYCLE)
-        try:
-            companies = await self.state.companies_needing_prospects(limit=batch_size)
-        except Exception as e:
-            logger.debug(f"companies_needing_prospects failed: {e}")
-            return 0
-        if not companies:
-            return 0
-
-        default_industry = (
-            self.config.icp.industries[0] if self.config.icp.industries else ""
-        )
-        count = 0
-        for company in companies:
-            domain = (company.get("domain") or "").strip()
-            if not domain:
-                continue
-
-            if await self._skip_listed_company(company, domain):
-                continue
-            if await hunter_searches_remaining(self.state) <= 0:
-                break
-            await record_hunter_search(self.state)
-            people = await hunter_domain_people(domain, api_key)
-            try:
-                await self.state.mark_prospects_checked(company["id"])
-            except Exception as e:
-                logger.debug(f"mark_prospects_checked failed for {domain}: {e}")
-
-            for person in people or []:
-                if not isinstance(person, dict):
-                    continue
-                title = person.get("position") or ""
-                if not self._title_matches_icp(title):
-                    continue
-
-                verification = person.get("verification") or {}
-                hunter_status = (verification.get("status") or "").lower()
-                email_status = self._HUNTER_STATUS_MAP.get(hunter_status, "guess")
-
-                prospect = Prospect(
-                    first_name=person.get("first_name") or "",
-                    last_name=person.get("last_name") or "",
-                    email=person.get("value") or "",
-                    email_status=email_status,
-                    email_verified=(email_status == "verified"),
-                    linkedin_url=person.get("linkedin") or "",
-                    company=company.get("name") or self._domain_to_name(domain),
-                    company_id=company["id"],
-                    title=title,
-                    seniority=person.get("seniority") or self._infer_seniority(title),
-                    industry=company.get("industry") or default_industry,
-                    source="hunter_domain_search",
-                    source_url=f"https://{domain}",
-                )
-
-                if not prospect.is_valid():
-                    continue
-                if await self._is_duplicate_prospect(prospect):
-                    continue
-
-                await self.state.add_prospect(prospect)
-                self._remember_prospect(prospect)
-                count += 1
-                logger.info(
-                    f"Scout: Added {prospect.full_name()} ({prospect.title}) "
-                    f"at {prospect.company} [hunter]"
-                )
-                if count >= MAX_PROSPECTS_PER_CYCLE:
-                    return count
-
-        return count
 
     # ── Strategy 0: Known companies with zero prospects ──
 
@@ -913,7 +728,7 @@ class Scout:
     async def _prospect_via_company_discovery(self) -> int:
         """Find companies via multiple methods, scrape team pages for contacts.
 
-        Python does ALL the searching and scraping. Claude only scores/personalizes
+        Python does ALL the searching and scraping. The Brain only scores/personalizes
         the contacts that Python already found.
         """
         logger.info("Scout: Discovering companies...")
@@ -991,7 +806,7 @@ class Scout:
             logger.info("Scout: No ICP-matching contacts found on team pages.")
             return 0
 
-        # Use Claude to score/personalize, with a Python heuristic fallback.
+        # Use the Brain to score/personalize, with a Python heuristic fallback.
         scored_contacts = await self._score_contacts(all_contacts)
 
         count = 0
@@ -1237,9 +1052,9 @@ class Scout:
         return result.email, result.status
 
     async def _score_contacts(self, contacts: list[Prospect]) -> list[Prospect]:
-        """Use Claude to score and add personalization notes to found contacts.
+        """Use the Brain to score and add personalization notes to found contacts.
 
-        Falls back to a deterministic Python heuristic if Claude is
+        Falls back to a deterministic Python heuristic if Brain is
         unavailable or returns malformed output, so scoring never blocks
         prospecting.
         """
@@ -1288,7 +1103,7 @@ Respond ONLY with the JSON array."""
                 agent="scout", task="score_contacts",
             )
         except Exception as e:
-            logger.warning(f"Scout: Claude scoring errored ({e}); using heuristic scores.")
+            logger.warning(f"Scout: Brain scoring errored ({e}); using heuristic scores.")
             result = None
 
         if isinstance(result, list):
@@ -1309,7 +1124,7 @@ Respond ONLY with the JSON array."""
                     if isinstance(note, str):
                         contacts[idx].personalization_notes = note.strip()[:500]
         else:
-            logger.warning("Scout: Claude scoring failed, using heuristic scores.")
+            logger.warning("Scout: Brain scoring failed, using heuristic scores.")
 
         contacts = [c for c in contacts if c.score >= 30]
         contacts.sort(key=lambda c: c.score, reverse=True)
@@ -1576,7 +1391,7 @@ Respond ONLY with the JSON array."""
     async def _known_small(self, domain: str) -> bool:
         """Is there a size signal independent of the website? The ICP's
         company size, the company's size on file, or a local-business
-        listing (OpenStreetMap, DataForSEO Business Listings) as its source.
+        listing (OpenStreetMap) as its source.
         Three executives on a homepage say nothing about headcount."""
         def upper(text: str) -> int | None:
             nums = [int(n.replace(",", "")) for n in re.findall(r"\d[\d,]*", text or "")]

@@ -272,7 +272,7 @@ class EmailChannelConfig(BaseModel):
     send_to_risky: bool = False
     # Don't write for prospects scored below this (0-100, Scout's fit
     # score). 0, the default, writes for everyone with a deliverable
-    # address, as before. Raising it keeps Claude calls (and sends) for the
+    # address, as before. Raising it keeps model calls (and sends) for the
     # prospects that match the ICP best.
     min_write_score: int = 0
     # Native providers queue mail for approval. Instantly cannot use that
@@ -375,171 +375,7 @@ class ChannelsConfig(BaseModel):
     linkedin: LinkedInChannelConfig = LinkedInChannelConfig()
 
 
-PRECLEARED_ADDRESS_SOURCES = ("published", "bought", "scraped", "given", "unknown")
-# Where a sender can be based for the Precleared check: the countries whose
-# cold-email rules Precleared applies (UK, US, Canada, Germany, France,
-# Australia, Ireland, the Netherlands, Spain, Italy, Latvia, the UAE, Egypt
-# and Qatar). The check itself decides by the recipient's country; this
-# list only gates sender_country in the config and in setup.
-PRECLEARED_SENDER_COUNTRIES = (
-    "GB", "US", "CA", "DE", "FR", "AU", "IE", "NL", "ES", "IT", "LV", "AE", "EG", "QA",
-)
-# Common spellings read as their two-letter codes.
-COUNTRY_ALIASES = {"UK": "GB", "USA": "US", "UAE": "AE"}
-
-
-def normalize_prospect_country(v) -> str:
-    """A two-letter country code ("us" -> "US", "UK" -> "GB"), or "" for none.
-
-    Raises ValueError on anything else, including the booleans YAML makes of
-    an unquoted NO (Norway) or ON, so a typo is never silently ignored.
-    """
-    if isinstance(v, bool):
-        raise ValueError(
-            f"prospect_country was read as {v}. YAML turns an unquoted NO or "
-            'ON into true/false, so quote the code, e.g. prospect_country: "NO".'
-        )
-    v = str(v or "").strip().upper()
-    v = COUNTRY_ALIASES.get(v, v)
-    if v and not (len(v) == 2 and v.isascii() and v.isalpha()):
-        raise ValueError(
-            f"'{v}' is not a valid prospect_country. Use a two-letter "
-            "country code such as US or GB, or leave it empty."
-        )
-    return v
-
-
-class PreclearedConfig(BaseModel):
-    """Optional per-recipient cold-email check through Precleared.
-
-    Off by default. When on, each new recipient is checked once, before the
-    first cold email, under the cold-email rules of the recipient's country
-    (UK PECR, US CAN-SPAM, Canada's CASL, Germany's UWG, France's CPCE and
-    the other countries in PRECLEARED_SENDER_COUNTRIES). Any verdict other
-    than ok_to_email holds the email back with the reason. See
-    sellbird/integrations/precleared.py.
-    """
-
-    enabled: bool = False
-    # Where your business is based, as a two-letter code from
-    # PRECLEARED_SENDER_COUNTRIES (GB, US, CA, DE, FR, AU, IE, NL, ES, IT, LV,
-    # AE, EG or QA). Required when enabled.
-    sender_country: str = ""
-    # Where prospect addresses come from, in Precleared's terms. Sellbird
-    # builds most addresses from a learned pattern, so the honest default
-    # is "unknown"; use "published" only if yours are copied from the
-    # businesses' own websites.
-    address_source: str = "unknown"
-    # Optional: the country your prospects are in (two letters, e.g. "US"),
-    # if they are all in one. Precleared uses it only when it can't work out
-    # the recipient's country from the address, company records or the
-    # company's website. Leave empty if your prospects are spread out.
-    prospect_country: str = ""
-
-    @field_validator("sender_country", mode="before")
-    @classmethod
-    def _upper_country(cls, v) -> str:
-        v = str(v or "").strip().upper()
-        return COUNTRY_ALIASES.get(v, v)
-
-    @field_validator("address_source", mode="before")
-    @classmethod
-    def _valid_source(cls, v) -> str:
-        v = str(v or "unknown").strip().lower()
-        if v not in PRECLEARED_ADDRESS_SOURCES:
-            raise ValueError(
-                f"'{v}' is not a valid address_source. "
-                f"Use one of: {', '.join(PRECLEARED_ADDRESS_SOURCES)}."
-            )
-        return v
-
-    @field_validator("prospect_country", mode="before")
-    @classmethod
-    def _valid_prospect_country(cls, v) -> str:
-        return normalize_prospect_country(v)
-
-    @model_validator(mode="after")
-    def _country_when_enabled(self):
-        if self.enabled and self.sender_country not in PRECLEARED_SENDER_COUNTRIES:
-            raise ValueError(
-                "compliance.precleared.sender_country must be one of "
-                f"{', '.join(PRECLEARED_SENDER_COUNTRIES)} when the check is enabled."
-            )
-        return self
-
-
-DEFAULT_OPT_OUT_LINE = "Not interested? Just let me know and I won't email you again."
-# The default before any wording was allowed: emails already sent carry it, so a
-# reply quoting it is still recognised as our text.
-PREVIOUS_DEFAULT_OPT_OUT_LINE = 'Not interested? Reply "no thanks" and I won\'t email again.'
-# Replies the Handler honours as an opt-out by rule, before the model reads them.
-# The opt-out line itself can use any wording: the model reads every reply for a
-# request to stop, however it is put.
-OPT_OUT_WORDS = ("no thanks", "no thank you", "unsubscribe", "stop", "remove me",
-                 "opt out")
-HEBREW_OPT_OUT_WORDS = ("הסר", "הסירו", "הסרה", "לא תודה", "הסירו אותי", "תורידו אותי")
-SPANISH_OPT_OUT_WORDS = ("no gracias", "baja", "darme de baja")
-FRENCH_OPT_OUT_WORDS = ("non merci", "non, merci", "arrêt", "désabonner", "désabonnement",
-                        "désabonnez-moi", "retirez-moi")
-# Wording that tells people the emails can stop, in any phrasing. An
-# opt_out_line must say so somehow: one that reads like a sign-off ("Cheers!")
-# gives nobody a way out, which is worse than leaving the line off on purpose.
-_SAYS_IT_STOPS_RE = re.compile(
-    r"\b(?:stop|unsubscribe|opt[\s-]?out|remove|no\s+thanks|not\s+interested"
-    r"|leave\s+you\s+(?:be|alone)|take\s+you\s+off|off\s+(?:my|our|the)\s+list"
-    r"|hear\s+from\s+(?:me|us)|no\s+more\s+e-?mails?"
-    r"|won[\'’]?t\s+(?:\w+\s+){0,2}(?:e-?mail|write|contact|reach|bother|follow|message|send)"
-    r"|(?:not|never)\s+(?:\w+\s+){0,2}(?:e-?mail|contact|write|message)\w*\s+(?:you\s+)?again)",
-    re.IGNORECASE)
-_SAYS_IT_STOPS_HE_RE = re.compile(
-    r"(?:הסר|להסיר|הסירו|הסרה|נסיר|לא,?\s+תודה|להפסיק|אפסיק|תורידו|לא\s+אפנה|לא\s+אכתוב|לא\s+אשלח)")
-_SAYS_IT_STOPS_ES_RE = re.compile(
-    r"(?:\bbaja\b|no,?\s+gracias|dejar[ée]?\s+de|dejo\s+de|no\s+(?:le|te|les)\s+(?:escribir|volver|molestar)"
-    r"|no\s+volver[ée]|eliminar|quitar|\bparar\b)",
-    re.IGNORECASE)
-_SAYS_IT_STOPS_IT_RE = re.compile(
-    r"(?:\bnon\s+(?:ti|vi|le)\s+(?:scriver[òo]|scrivo|contatter[òo]|contatto|disturber[òo]|disturbo"
-    r"|mander[òo]|mando|invier[òo]|invio)\b"
-    r"|\bnon\s+(?:ricever\w*|vuoi\s+ricevere|volete\s+ricevere)\b"
-    r"|\b(?:disiscri\w+|rimuov\w+|rimozione|cancell\w+|togli\w+)"
-    r"|\bannull\w*\s+l[’']?\s*iscrizione"
-    r"|\bsmetto\s+di\b|\bsmetter[òo]\s+di\b"
-    r"|\bnon\s+(?:ti\s+|vi\s+|le\s+)?interess\w+|\bnon\s+interessat\w+|\bstop\b)",
-    re.IGNORECASE)
-# French, matched with accents removed (see _fold_accents): "Pas intéressé?
-# Répondez-moi et je ne vous écrirai plus", "Répondez ARRÊT pour vous désabonner".
-_SAYS_IT_STOPS_FR_RE = re.compile(
-    r"(?:desabonn|desinscri|\barret(?:e|er|ez|erai|erons)?\b|\bnon,?\s+merci\b"
-    r"|\bpas\s+interess"
-    r"|\bn(?:e\s+|')(?:vous\s+|t'|te\s+)?(?:ecri|contact|relanc|envo|enverr|derang|sollicit"
-    r"|importun|recevr)\w*\s+(?:plus|jamais|pas\s+(?:a|de)\s+nouveau)\b"
-    r"|\bne\s+plus\s+(?:jamais\s+)?(?:vous\s+|t'|te\s+|m'|me\s+)?(?:ecrire|contacter|relancer"
-    r"|recevoir|solliciter|deranger|etre\s+(?:contacte|sollicite|relance))"
-    r"|\bne\s+(?:voulez|souhaitez|desirez|veux|veut)\s+(?:plus|pas)\s+(?:\w+\s+){0,2}?"
-    r"(?:recevoir|courriels?|messages?|nouvelles)"
-    r"|\b(?:retir|enlev|supprim|ray)\w*\s+(?:\w+\s+){0,3}?(?:de|d'|des)\s*"
-    r"(?:(?:la|ma|notre|votre|vos|nos|mes|cette|ses)\s+)?(?:listes?|envois?|base|infolettre|courriels)"
-    r"|\blaiss\w*\s+tranquilles?"
-    r"|\bplus\s+(?:jamais\s+)?(?:de\s+)?(?:courriels?|messages?|nouvelles)\s+de\s+(?:ma|notre)\s+part)",
-    re.IGNORECASE)
-# "Click" in French: "cliquez ici pour vous désabonner".
-_FRENCH_CLICK_RE = re.compile(r"\bcliqu(?:ez|er|e)\b", re.IGNORECASE)
-
-
-def _fold_accents(text: str) -> str:
-    """Latin accents dropped and curly apostrophes made straight, so French
-    reads the same typed with or without them."""
-    text = text.replace("\u2019", "'").replace("\u2018", "'")
-    return "".join(c for c in unicodedata.normalize("NFD", text)
-                   if not (unicodedata.combining(c) and ord(c) < 0x370))
-
-
-# "Click" in Hebrew: a footer has no link to click.
-_HEBREW_CLICK_RE = re.compile(r"(?<!\w)ו?(?:לחצו|לחצי|לחץ\s+(?:כאן|על)|הקליקו|הקליקי|הקלק)(?!\w)")
-
-
 class ComplianceConfig(BaseModel):
-    precleared: PreclearedConfig = PreclearedConfig()
     # Added under every cold (sequence) email at send time; never to replies.
     # CAN-SPAM requires a postal address you receive mail at (a street
     # address, PO box or virtual mailbox) and a working way to opt out.
@@ -677,15 +513,15 @@ class QuietHoursConfig(BaseModel):
 
 
 class UsageConfig(BaseModel):
-    max_daily_claude_percent: float = 80.0
+    max_daily_percent: float = 80.0
     heartbeat_interval_minutes: int = 15
     quiet_hours: QuietHoursConfig = QuietHoursConfig()
 
-    @field_validator("max_daily_claude_percent")
+    @field_validator("max_daily_percent")
     @classmethod
     def _valid_percent(cls, v: float) -> float:
         if not 0 < v <= 100:
-            raise ValueError("max_daily_claude_percent must be between 0 and 100")
+            raise ValueError("max_daily_percent must be between 0 and 100")
         return v
 
     @field_validator("heartbeat_interval_minutes")
@@ -696,63 +532,33 @@ class UsageConfig(BaseModel):
         return v
 
 
-BRAIN_PROVIDERS = ("claude", "codex")
-CODEX_REASONING_EFFORTS = ("minimal", "low", "medium", "high", "xhigh")
+BRAIN_PROVIDERS = ("local",)
 
-# Model names are passed to a CLI, so they must look like a model name and
-# never like a flag ("-x") or anything a shell would treat specially.
 _MODEL_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/\[\]-]{0,127}$")
 
 
 class BrainConfig(BaseModel):
-    """Which subscription Sellbird thinks with.
+    """Local brain configuration."""
 
-    ``claude`` (default) runs Claude Code headless on your Claude plan.
-    ``codex`` runs Codex on your ChatGPT plan. There is never an automatic
-    fallback between them, and an explicit ``model`` only affects Sellbird —
-    your own Claude Code / Codex settings are never read or changed.
-    """
-
-    provider: str = "claude"
-    model: str = ""  # empty = the provider's own default
-    reasoning_effort: str = ""  # codex only; empty = model default
+    provider: str = "local"
+    model: str = "local-model"
+    reasoning_effort: str = ""
 
     @field_validator("provider", mode="before")
     @classmethod
     def _valid_provider(cls, v) -> str:
-        v = str(v or "claude").strip().lower()
-        if v not in BRAIN_PROVIDERS:
-            raise ValueError(
-                f"'{v}' is not a supported brain provider. "
-                f"Use one of: {', '.join(BRAIN_PROVIDERS)}."
-            )
-        return v
+        return "local"
 
     @field_validator("model", mode="before")
     @classmethod
     def _valid_model(cls, v) -> str:
-        v = str(v or "").strip()
-        if v and not _MODEL_NAME_RE.match(v):
-            raise ValueError(f"'{v}' is not a valid model name.")
-        return v
-
-    @field_validator("reasoning_effort", mode="before")
-    @classmethod
-    def _valid_effort(cls, v) -> str:
-        v = str(v or "").strip().lower()
-        if v and v not in CODEX_REASONING_EFFORTS:
-            raise ValueError(
-                f"'{v}' is not a valid reasoning effort. "
-                f"Use one of: {', '.join(CODEX_REASONING_EFFORTS)}."
-            )
-        return v
+        return str(v or "local-model").strip()
 
 
 class WriterConfig(BaseModel):
     # Run every draft through one extra editing-only brain call using the
-    # Humanizer skill's instructions (~/.claude/skills/humanizer/SKILL.md,
-    # or SELLBIRD_HUMANIZER_SKILL). Off by default: installing the skill for
-    # your own Claude Code use never changes what Sellbird sends on its own.
+    # Humanizer skill's instructions,
+    # or SELLBIRD_HUMANIZER_SKILL). Off by default: installing the skill never changes what Sellbird sends on its own.
     humanizer: bool = False
     # Your own rules for the emails Sellbird drafts, as a markdown file:
     # length, structure, what to say about the product, links, subject lines,
@@ -847,18 +653,8 @@ class SellbirdConfig(BaseModel):
 
 class EnvConfig(BaseModel):
     instantly_api_key: str = ""
-    # Discovery providers
-    dataforseo_login: str = ""
-    dataforseo_password: str = ""
-    dataforseo_sandbox: str = ""   # any truthy value routes to the free sandbox
     linkedin_email: str = ""
     linkedin_password: str = ""
-    hunter_api_key: str = ""
-    serper_api_key: str = ""
-    scavio_api_key: str = ""
-    tinyfish_api_key: str = ""
-    reoon_api_key: str = ""
-    zerobounce_api_key: str = ""
     # Native mail providers (channels.email.provider: gmail | smtp)
     gmail_client_id: str = ""
     gmail_client_secret: str = ""
@@ -873,8 +669,6 @@ class EnvConfig(BaseModel):
     # Microsoft 365 (channels.email.provider: microsoft)
     m365_client_id: str = ""
     m365_tenant_id: str = ""
-    # Optional: only used when compliance.precleared.enabled is true.
-    precleared_api_key: str = ""
 
 
 def _format_validation_error(e: ValidationError) -> str:
@@ -961,7 +755,7 @@ def load_brain_config(config_path: str | None = None) -> BrainConfig:
 
     Training runs before a product is configured (the template sellbird.yaml
     still has placeholder values), but it must still think with the
-    provider the user chose. A missing file or section means the Claude
+    provider the user chose. A missing file or section means the local
     default; an invalid section raises rather than silently switching
     providers.
     """
@@ -994,17 +788,8 @@ def load_env() -> EnvConfig:
     load_dotenv()
     env = EnvConfig(
         instantly_api_key=os.getenv("INSTANTLY_API_KEY", "").strip(),
-        dataforseo_login=os.getenv("DATAFORSEO_LOGIN", "").strip(),
-        dataforseo_password=os.getenv("DATAFORSEO_PASSWORD", "").strip(),
-        dataforseo_sandbox=os.getenv("DATAFORSEO_SANDBOX", "").strip(),
         linkedin_email=os.getenv("LINKEDIN_EMAIL", "").strip(),
         linkedin_password=os.getenv("LINKEDIN_PASSWORD", "").strip(),
-        hunter_api_key=os.getenv("HUNTER_API_KEY", "").strip(),
-        serper_api_key=os.getenv("SERPER_API_KEY", "").strip(),
-        scavio_api_key=os.getenv("SCAVIO_API_KEY", "").strip(),
-        tinyfish_api_key=os.getenv("TINYFISH_API_KEY", "").strip(),
-        reoon_api_key=os.getenv("REOON_API_KEY", "").strip(),
-        zerobounce_api_key=os.getenv("ZEROBOUNCE_API_KEY", "").strip(),
         gmail_client_id=os.getenv("GMAIL_CLIENT_ID", "").strip(),
         gmail_client_secret=os.getenv("GMAIL_CLIENT_SECRET", "").strip(),
         smtp_host=os.getenv("SMTP_HOST", "").strip(),
@@ -1017,7 +802,6 @@ def load_env() -> EnvConfig:
         imap_password=os.getenv("IMAP_PASSWORD", "").strip(),
         m365_client_id=os.getenv("M365_CLIENT_ID", "").strip(),
         m365_tenant_id=os.getenv("M365_TENANT_ID", "").strip(),
-        precleared_api_key=os.getenv("PRECLEARED_API_KEY", "").strip(),
     )
     return env
 

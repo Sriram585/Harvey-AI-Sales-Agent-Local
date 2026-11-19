@@ -1,7 +1,7 @@
 """Humanizer pass — rewrites drafts with the operator's installed Humanizer skill.
 
-Sellbird's brain calls run with no tools and no skills (see brain.py), so a
-Claude Code skill can't be invoked directly. Instead the skill's
+Sellbird's brain calls run with no tools and no skills (see brain.py), so an
+external skill can't be invoked directly. Instead the skill's
 instructions are read from the operator's skills folder and sent as a
 second, editing-only call over drafts that are already written.
 
@@ -28,7 +28,7 @@ logger = logging.getLogger("sellbird.humanize")
 SKILL_PATH = Path(
     os.getenv(
         "SELLBIRD_HUMANIZER_SKILL",
-        str(Path.home() / ".claude" / "skills" / "humanizer" / "SKILL.md"),
+        str(Path.home() / ".sellbird" / "skills" / "humanizer" / "SKILL.md"),
     )
 )
 MERGE_VAR = re.compile(r"\{\{\s*\w+\s*\}\}")

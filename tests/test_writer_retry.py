@@ -2,7 +2,7 @@
 
 When _write_sequence comes back empty (unparseable output, or an inbox
 sequence that used a person's name), the batch's prospects stayed 'new', so
-every heartbeat chose write_campaign again, spent a Claude call, and Scout
+every heartbeat chose write_campaign again, spent a brain call, and Scout
 never ran. Now each prospect gets a few attempts; after that it is moved to
 'write_failed', which is visible and no longer blocks the pipeline. A
 provider outage is not the model's fault and never counts as an attempt.
@@ -85,7 +85,7 @@ async def test_a_batch_that_keeps_failing_stops_after_a_few_attempts(state):
 @pytest.mark.asyncio
 async def test_a_provider_outage_never_counts_as_an_attempt(state):
     pid = await add(state, 1)
-    writer = Writer(FakeBrain(paused="Claude usage limit reached"), state, CONFIG, None)
+    writer = Writer(FakeBrain(paused="Brain usage limit reached"), state, CONFIG, None)
     for _ in range(MAX_WRITE_ATTEMPTS + 2):
         await writer.run()
     assert await status(state, pid) == "new"
@@ -117,7 +117,7 @@ async def test_attempts_are_counted_per_prospect(state):
 
 @pytest.mark.asyncio
 async def test_an_empty_reply_is_an_outage_not_a_bad_draft(state):
-    # On Claude a logout, rate limit, timeout or missing CLI returns "" without
+    # On local brain a logout, rate limit, timeout or missing CLI returns "" without
     # pausing the brain. Only a reply that came back unusable may count.
     pid = await add(state, 1)
     brain = FakeBrain(reply=None)
@@ -158,8 +158,8 @@ async def test_given_up_prospects_can_be_retried(state, capsys):
     assert await state.retry_write_failed() == 0
 
 
-class _ClaudeProcess:
-    """A Claude CLI that exits 0 with the given JSON result payload."""
+class _BrainProcess:
+    """A Brain CLI that exits 0 with the given JSON result payload."""
 
     returncode = 0
 
@@ -182,7 +182,7 @@ async def test_a_cli_reported_api_error_is_no_reply_not_model_text(state, monkey
     payloads = []
 
     async def fake_exec(*cmd, **kwargs):
-        return _ClaudeProcess(payloads.pop(0))
+        return _BrainProcess(payloads.pop(0))
 
     async def no_sleep(*a, **kw):
         return None

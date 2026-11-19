@@ -87,7 +87,7 @@ async def test_reply_without_subject(skill):
 
 @pytest.mark.asyncio
 async def test_installed_skill_alone_does_not_turn_it_on(skill):
-    # Installing the skill for Claude Code must not change what Sellbird sends.
+    # Installing the skill for coding agent must not change what Sellbird sends.
     brain = FakeBrain({"subject": "after five", "body": "Hi {{first_name}}, who picks up?"})
     assert await humanize(brain, [DRAFT], "writer", path=skill) == [DRAFT]
     assert brain.prompts == []

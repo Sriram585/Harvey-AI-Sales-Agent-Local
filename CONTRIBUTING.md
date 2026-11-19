@@ -1,8 +1,7 @@
 # Contributing to Sellbird
 
 For anyone changing this repository and opening pull requests, and above all
-for coding agents (Claude Code, Codex, Cursor, Aider). `CLAUDE.md` is different:
-it guides someone *using* Sellbird. This file is about contributing to it.
+for coding agents. This file is about contributing to it.
 
 ## No real contact data, anywhere it gets published
 
@@ -37,7 +36,7 @@ issue:**
   table, not the addresses found, not the domains tried. Keep the detailed
   results in your local scratch directory.
 - Vendors and infrastructure are fine to name, because they aren't contacts:
-  Google, Cloudflare, Hunter, Instantly, DataForSEO, Greenhouse and so on.
+  Google, Instantly, Greenhouse and so on.
   Companies named only for public product facts (whose job board format was
   tested) are fine too. Their staff are not.
 

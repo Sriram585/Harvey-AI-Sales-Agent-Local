@@ -3,7 +3,7 @@
 Scout scores every prospect 0-100 for ICP fit, but the writer used to draft
 for anyone with a deliverable address, whatever the score. With a threshold
 set, a prospect below it keeps its address and stays 'new' (no sequence, no
-Claude call); 0, the default, writes for everyone as before.
+brain call); 0, the default, writes for everyone as before.
 """
 
 import logging

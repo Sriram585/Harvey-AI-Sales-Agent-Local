@@ -6,7 +6,7 @@ import pytest
 from sellbird.agents.scout import Scout
 
 STRATEGIES = (
-    "hunter", "known_companies", "linkedin",
+    "search", "known_companies", "linkedin",
     "hiring_boards", "profile_search", "company_discovery",
 )
 

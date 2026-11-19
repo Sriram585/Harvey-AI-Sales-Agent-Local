@@ -177,7 +177,7 @@ def cmd_train(args):
 
 def cmd_mcp(args):
     """Serve MCP over stdio for the user's coding agent. Prints nothing else."""
-    # `sellbird mcp install|uninstall [claude|codex]` and --print.
+    # `sellbird mcp` and --print.
     if getattr(args, "mcp_action", None):
         from sellbird import mcp_install
         sys.exit(mcp_install.run_command(args.mcp_action, args.client,
@@ -236,9 +236,7 @@ def cmd_status(args):
         print(f"  Draft campaigns:      {summary['draft_campaigns']}")
         print(f"  Active campaigns:     {summary['active_campaigns']}")
         print(f"  Open conversations:   {summary['open_conversations']}")
-        by_provider = summary.get("usage_today_by_provider", {})
-        print(f"  Claude calls today:   {by_provider.get('claude', summary['usage_today'])}")
-        print(f"  Codex calls today:    {by_provider.get('codex', 0)}")
+        print(f"  Brain calls today:    {summary['usage_today']}")
         from sellbird.config import compliance_notice, load_config, sending_notice
         loaded = None
         try:
@@ -271,14 +269,7 @@ def cmd_status(args):
             print(f"  Sending:              NOT SENDING ({title.split(': ', 1)[-1]})")
             print(textwrap.fill(detail, width=72, initial_indent="                        ",
                                 subsequent_indent="                        "))
-        from sellbird.integrations.precleared import current_hold, hold_message
-        precleared_hold = await current_hold(state, loaded)
-        if precleared_hold:
-            message = hold_message(precleared_hold)
-            print(f"  Precleared:           HOLDING COLD EMAIL since {precleared_hold.get('since', '?')}")
-            print(textwrap.fill(f"{message['title']}. {message['detail']}", width=72,
-                                initial_indent="                        ",
-                                subsequent_indent="                        "))
+
         if address_notice:
             print("  Postal address:       MISSING")
             print(textwrap.fill(address_notice, width=72, initial_indent="                        ",
@@ -289,8 +280,7 @@ def cmd_status(args):
             brain_config = load_brain_config()
         except ConfigError as e:
             brain_config, config_error = None, e
-        # Only the configured provider's health: an old Codex pause says
-        # nothing once sellbird.yaml has switched to Claude.
+        # Only the configured provider's health.
         brain_status = active_brain_status(
             await state.get_setting(BRAIN_STATUS_KEY),
             brain_config.provider if brain_config else "")
@@ -307,14 +297,10 @@ def cmd_status(args):
                     healthy = False
                     print(f"  Brain:                {label} NOT READY")
                     print(f"                        {problem}")
-                elif brain.provider == "codex":
-                    print(f"  Brain:                {label} ready (CLI, isolation, login, "
-                          "model and account checked; no prompt sent)")
                 else:
-                    print(f"  Brain:                {label} CLI isolation flags present "
-                          "(login not checked: Claude is checked by its first call)")
+                    print(f"  Brain:                {label} ready")
         elif brain_status.get("status") == "paused":
-            label = {"claude": "Claude", "codex": "Codex"}.get(brain_status.get("provider"), "Brain")
+            label = "Brain"
             print(f"  Brain:                {label} PAUSED since {brain_status.get('since', '?')}")
             print(f"                        {brain_status.get('reason', '')}")
         print()
@@ -343,33 +329,9 @@ def cmd_usage(args):
         # Live quota for the ACTIVE provider only (best-effort). Each
         # subscription's gauge is read from its own source and labelled as
         # such; one is never shown as the other.
-        windows = None
-        provider = brain_config.provider if brain_config else None
-        try:
-            if provider == "codex":
-                from sellbird.codex import CodexClient, CodexQuotaClient
-                windows = await CodexQuotaClient(
-                    CodexClient(model=brain_config.model)).get_utilization()
-            elif provider == "claude":
-                from sellbird.integrations.quota import QuotaClient
-                windows = await QuotaClient().get_utilization()
-        except Exception:
-            pass
-
-        label = {"claude": "Claude", "codex": "Codex"}.get(provider, "Brain")
-        print(f"\n  {label} Usage")
+        print(f"\n  Brain Usage")
         print("  " + "=" * 52)
-        if windows:
-            labels = {"five_hour": "5-hour window", "seven_day": "Weekly",
-                      "limit_reached": "Usage limit"}
-            for key, w in windows.items():
-                resets = f"  (resets {w['resets_at']})" if w.get("resets_at") else ""
-                print(f"  {labels.get(key, key):<16} {w['utilization']:5.1f}% used{resets}")
-        elif provider == "codex":
-            print("  Quota gauge unavailable (check 'codex login', the Codex CLI "
-                  "version, and network).")
-        elif provider == "claude":
-            print("  Quota gauge unavailable (run 'claude login' or check network).")
+        print("  Local brain configured. No external quota limits.")
 
         totals = await state.usage_totals()
         print()
@@ -383,7 +345,7 @@ def cmd_usage(args):
             )
 
         by_provider = await state.usage_by_provider(days=args.days)
-        if len(by_provider) > 1 or (by_provider and by_provider[0]["provider"] != "claude"):
+        if len(by_provider) > 1:
             print(f"\n  By provider (last {args.days} days):")
             for row in by_provider:
                 print(
@@ -470,8 +432,7 @@ def cmd_export(args):
         )
         print(f"\n  Exported {count} prospect(s) to {args.out}  ({scope})")
         if count == 0 and not args.all:
-            print("  Tip: no deliverable emails yet? Add a REOON_API_KEY to .env so")
-            print("  Sellbird can verify addresses, or use --all for the raw list.\n")
+            print("  Tip: no deliverable emails yet? Verify addresses or use --all for the raw list.\n")
         else:
             print("  The CSV imports directly into Instantly, Smartlead, or any sequencer.\n")
 
@@ -575,7 +536,7 @@ def cmd_outbox(args):
 
 
 def cmd_profile(args):
-    """Read what companies' own websites say about them. Free, no Claude calls."""
+    """Read what companies' own websites say about them. Free, no external AI calls."""
     from sellbird.state import StateManager
     from sellbird.pipeline import run_profile_stage
 
@@ -887,164 +848,14 @@ def cmd_warmup(args):
     print("    - Google Postmaster Tools: https://postmaster.google.com - add the domain;")
     print("      it shows Gmail's spam rate and domain reputation once you send volume.")
     print("    - Inbox placement: send one email to a seed test (mail-tester.com is free)")
-    print("      and aim for 9/10+. TrulyInbox shows the warmup inbox rate, and with it")
-    print("      connected (sellbird trulyinbox connect) Sellbird reads it into this report.")
-    print("      Wait for ~95%+ inbox for a week before relying on cold sends.\n")
+    print("      and aim for 9/10+. Wait for ~95%+ inbox for a week before relying on cold sends.\n")
     if failed or unknown:
         raise SystemExit(1)
 
 
 def _warmup_service_check(address: str, warmup):
-    """The 'Warmup service' line: TrulyInbox's view of the mailbox, or the recommendation."""
     from sellbird import deliverability as d
-    from sellbird.integrations import trulyinbox as ti
-    from sellbird.state import StateManager
-
-    async def _run():
-        state = StateManager()
-        await state.init_db()
-        health, error = await ti.current_health(address)
-        other = health is None and not error and await ti.get_choice(state) == "other"
-        return d.check_warmup_service(health, warmup, error=error, other_service=other)
-    return asyncio.run(_run())
-
-
-def cmd_trulyinbox(args):
-    """Connect TrulyInbox, record another warmup service, or show the status."""
-    import getpass
-
-    from dotenv import load_dotenv
-
-    from sellbird import deliverability as d
-    from sellbird.config import ConfigError, load_config
-    from sellbird.integrations import trulyinbox as ti
-    from sellbird.paths import PROJECT_ROOT
-    from sellbird.state import StateManager
-
-    load_dotenv(PROJECT_ROOT / ".env")
-    try:
-        config = load_config()
-    except ConfigError as e:
-        print(f"\n  {e}\n")
-        raise SystemExit(1)
-    address = ti.sending_address(config)
-    warmup = config.channels.email.warmup
-
-    async def _run():
-        state = StateManager()
-        await state.init_db()
-        if args.trulyinbox_action == "other":
-            await ti.set_choice(state, "other")
-            print("\n  Noted: you use another warmup service. Sellbird won't ask about "
-                  "TrulyInbox again.\n")
-            return 0
-        if args.trulyinbox_action == "connect":
-            print(f"\n  Connect TrulyInbox. Don't have it yet? {ti.AFFILIATE_URL} {ti.AFFILIATE_TAG}")
-            print("  You need Starter or higher. In TrulyInbox, open Settings > API keys and")
-            print("  create a workspace key with accounts:read, warmup:read, analytics:read")
-            print("  and workspace:read.\n")
-            if not address:
-                print(f"\n  {ti.NO_ADDRESS}\n")
-                return 1
-            key = getpass.getpass("  TrulyInbox API key (hidden): ").strip()
-            if not key:
-                print("\n  No key entered.\n")
-                return 1
-            workspace = ti.key_from_env()[1]
-            ti.forget_rejected(key)
-            try:
-                client = ti.TrulyInbox(key, workspace)
-                health = await client.mailbox_health(address)
-            except ti.TrulyInboxError as e:
-                print(f"\n  {e}\n")
-                return 1
-            from sellbird.dashboard import _write_env_file
-            updates = {"TRULYINBOX_API_KEY": key}
-            if not workspace:
-                updates["TRULYINBOX_WORKSPACE_ID"] = client.workspace_id
-            try:
-                _write_env_file(updates)
-            except OSError as e:
-                print(f"\n  The key works, but Sellbird couldn't save it to .env: {e}\n")
-                return 1
-            await ti.set_choice(state, "connected")
-            print("\n  Connected. " + d.check_warmup_service(health, warmup).detail + "\n")
-            return 0
-        choice = await ti.get_choice(state)
-        health, error = await ti.current_health(address)
-        print(f"\n  TrulyInbox: {ti.describe_status(health, error, choice)}")
-        check = d.check_warmup_service(health, warmup, error=error,
-                                       other_service=choice == "other")
-        print(f"  {check.detail}\n")
-        return 0
-
-    raise SystemExit(asyncio.run(_run()))
-
-
-def cmd_precleared_key(args):
-    """Get a free Precleared key for an email address and save it to .env.
-
-    The same one-step key as `sellbird setup` offers, for after setup: when the
-    keyless allowance runs out, or for a coding agent setting Sellbird up
-    (`--email` asks nothing). The key is saved, never printed.
-    """
-    import os
-
-    from dotenv import load_dotenv
-
-    from sellbird.dashboard import _write_env_file
-    from sellbird.integrations.precleared import GET_KEY_URL, create_free_key
-    from sellbird.paths import PROJECT_ROOT
-    from sellbird.setup import _read_env_file
-
-    load_dotenv(PROJECT_ROOT / ".env")
-    if (_read_env_file().get("PRECLEARED_API_KEY", "").strip("'\" ")
-            or os.getenv("PRECLEARED_API_KEY", "").strip()):
-        print("\n  You already have a Precleared key (PRECLEARED_API_KEY), so Sellbird kept it.")
-        print("  To get a new one, delete that line from .env and run this again.\n")
-        raise SystemExit(0)
-
-    enabled, country = None, ""
-    try:
-        from sellbird.config import load_config
-        settings = load_config().compliance.precleared
-        enabled = settings.enabled is True
-        country = settings.sender_country if enabled else ""
-    except Exception:
-        pass  # only used for a hint and the key's country
-
-    email = (args.email or "").strip()
-    if not email:
-        print("\n  Sellbird can get you a free Precleared key: 100 checks a day for the")
-        print("  first 14 days, then 25 a day. Precleared receives your email address")
-        print("  to make the key (privacy: https://precleared.dev/privacy).")
-        try:
-            email = input("\n  → Email address for the key: ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print()
-            raise SystemExit(1)
-        if not email:
-            print("\n  No email address entered.\n")
-            raise SystemExit(1)
-
-    result = create_free_key(email, country=country)
-    if not result.key:
-        print(f"\n  Couldn't get a key: {result.error}.")
-        print(f"  You can get one at {GET_KEY_URL} and put it in .env as PRECLEARED_API_KEY.\n")
-        raise SystemExit(1)
-    try:
-        _write_env_file({"PRECLEARED_API_KEY": result.key})
-    except OSError as e:
-        print(f"\n  Precleared made the key, but Sellbird couldn't save it to .env ({e}).")
-        print(f"  Fix that and run this again, or get a key at {GET_KEY_URL}.\n")
-        raise SystemExit(1)
-    print("\n  Done: your free Precleared key is saved in .env as PRECLEARED_API_KEY.")
-    print("  It gives Sellbird 100 checks a day for 14 days, then 25 a day.")
-    if enabled is False:
-        print("  The check itself is off: turn it on with `sellbird setup` or set")
-        print("  compliance.precleared.enabled: true in your config.")
-    print("  If Sellbird is running, restart it so it uses the key.\n")
-    raise SystemExit(0)
+    return d.check_warmup_service(None, warmup, error=None, other_service=False)
 
 
 def cmd_sending(args):
@@ -1151,13 +962,13 @@ def main():
         help="Max pages to crawl (default: 100)",
     )
     sub.add_argument(
-        "--provider", choices=["claude", "codex"], default=None,
-        help="Subscription to think with (default: the one in your config, else claude)",
+        "--provider", default="local",
+        help="Subscription to think with (default: local)",
     )
     sub.add_argument("--model", default=None, help="Model for this provider (default: provider default)")
     sub.add_argument(
         "--reasoning-effort", default=None,
-        help="Codex reasoning effort (minimal/low/medium/high/xhigh)",
+        help="Model reasoning effort",
     )
     sub.set_defaults(func=cmd_train)
 
@@ -1175,8 +986,7 @@ def main():
     sub = subparsers.add_parser("status", help="Show pipeline status")
     sub.add_argument(
         "--check", action="store_true",
-        help="Also check the configured brain now (Codex: CLI version, isolation "
-             "and login; Claude: CLI isolation flags; no model call)",
+        help="Check the configured local brain",
     )
     sub.set_defaults(func=cmd_status)
 
@@ -1239,7 +1049,7 @@ def main():
                      help="Hard cap in dollars (default: 1.00)")
     sub.add_argument("--preset", default="", choices=["", "yc", "hiring", "accelerator", "funding"],
                      help="A built-in search instead of your ICP's industries "
-                          "(each needs a search provider like tinyfish, serper or dataforseo_serp). "
+                          " "
                           "yc: startups whose own site says they're YC-backed; "
                           "hiring: companies whose own careers pages list one of "
                           "your hiring_signals roles (else ICP titles); "
@@ -1251,7 +1061,7 @@ def main():
     sub.set_defaults(func=cmd_discover)
 
     sub = subparsers.add_parser(
-        "profile", help="Read discovered companies' websites (free, no Claude)")
+        "profile", help="Read discovered companies' websites (free, no external AI)")
     sub.add_argument("--limit", type=int, default=200,
                      help="Max sites to read (default: 200)")
     sub.add_argument("--stale-days", type=int, default=90,
@@ -1283,23 +1093,7 @@ def main():
                      help="Domain to check (default: your sending mailbox's domain)")
     sub.set_defaults(func=cmd_warmup)
 
-    sub = subparsers.add_parser(
-        "trulyinbox", help="Warmup service: connect TrulyInbox so Sellbird can read the inbox rate")
-    sub.add_argument("trulyinbox_action", nargs="?", default="status",
-                     choices=["status", "connect", "other"],
-                     help="connect a key, 'other' if you use another warmup service, "
-                          "or show the status (default)")
-    sub.set_defaults(func=cmd_trulyinbox)
-
-    sub = subparsers.add_parser(
-        "precleared-key",
-        help="Get a free Precleared key for the cold-email check and save it to .env")
-    sub.add_argument("--email", default="",
-                     help="Email address for the key (asked if not given)")
-    sub.set_defaults(func=cmd_precleared_key)
-
-    # sellbird usage
-    sub = subparsers.add_parser("usage", help="Show brain usage and quota (Claude or Codex)")
+    sub = subparsers.add_parser("usage", help="Show brain usage")
     sub.add_argument("--days", type=int, default=30, help="Breakdown window (default: 30)")
     sub.set_defaults(func=cmd_usage)
 
@@ -1307,8 +1101,7 @@ def main():
         "mcp", help="MCP server for your coding agent (launched by it, over stdio)")
     sub.add_argument("mcp_action", nargs="?", choices=["install", "uninstall"],
                      help="Add or remove the server in your coding agent's config")
-    sub.add_argument("client", nargs="?", choices=["claude", "codex"],
-                     help="Which agent (default: Claude Code only)")
+    
     sub.add_argument("--print", dest="print_config", action="store_true",
                      help="Print the config to add by hand; change nothing")
     sub.add_argument("--yes", action="store_true", help="Apply without asking")

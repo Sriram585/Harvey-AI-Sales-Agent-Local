@@ -112,12 +112,12 @@ def use_home(home: Home) -> Iterator[Home]:
 
 # What only runs on the user's own machine, by require_self_hosted's feature
 # name. A hosted home refuses these because they reach into that machine (its
-# Claude or Codex login, its files, its processes), not because hosted lacks
+# local AI, its files, its processes), not because hosted lacks
 # the capability: hosted runs its own brain, training and discovery on the
 # server, through the same engine.
 LOCAL_ONLY: dict[str, str] = {
-    "local_ai_loop": "the heartbeat calling the Claude or Codex CLI signed in on this computer",
-    "local_training": "training through the Claude or Codex CLI on this computer",
+    "local_ai_loop": "the heartbeat calling the local AI on this computer",
+    "local_training": "training through the local AI on this computer",
     "local_discovery": "discovery runs started from this computer's dashboard",
     "desktop": "the menu-bar app and starting at login",
     "mcp_install": "adding Sellbird to this computer's coding-agent config",

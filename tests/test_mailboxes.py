@@ -161,13 +161,13 @@ async def test_smtp_keeps_its_password_in_the_keychain_only(store):
     mid = await mailboxes.connect_smtp_mailbox(
         store, secrets, Config, address="Two@Side.co", display_name="Ethan R",
         warmup_started_at="", settings=SmtpSettings(host="smtp.side.co", username="two@side.co",
-                                                    password="hunter2"))
+                                                    password="dummy_pass_123"))
     row = await store.get_mailbox(mid)
-    assert "hunter2" not in json.dumps(row)
-    assert backend.get_password("sellbird", f"mailbox:{mid}:smtp") == "hunter2"
+    assert "dummy_pass_123" not in json.dumps(row)
+    assert backend.get_password("sellbird", f"mailbox:{mid}:smtp") == "dummy_pass_123"
     provider = mailboxes.build_provider(row, config=Config, env=Env(), secrets=secrets)
     assert isinstance(provider, SmtpImapProvider)
-    assert provider.smtp_pass == "hunter2" and provider.identity.address == "two@side.co"
+    assert provider.smtp_pass == "dummy_pass_123" and provider.identity.address == "two@side.co"
     assert provider.identity.display_name == "Ethan R"
 
 

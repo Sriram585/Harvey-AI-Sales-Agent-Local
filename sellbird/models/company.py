@@ -22,7 +22,7 @@ class Company(BaseModel):
     phone: str = ""
     source: str = ""          # how we found them: google_dork, linkedin, company_scrape
     source_url: str = ""      # specific URL where we found the info
-    # Provider-stable identity ("dataforseo:ChIJ...", "osm:node/123"). The
+    # Provider-stable identity ("external:ChIJ...", "osm:node/123"). The
     # dedup key for businesses that have no website — which are precisely the
     # best prospects for anyone selling one.
     external_id: str = ""

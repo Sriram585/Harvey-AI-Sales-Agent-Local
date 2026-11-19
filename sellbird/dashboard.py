@@ -278,14 +278,12 @@ async def get_setup_status():
         "help": provider_help,
     })
 
-    # 4. Email verification (needed for addresses to be sendable, not 'guess')
-    verifier_set = _has("REOON_API_KEY") or _has("ZEROBOUNCE_API_KEY") or _has("HUNTER_API_KEY")
+    # 4. Email verification
     checks.append({
-        "id": "verifier", "label": "Email verification key",
-        "done": verifier_set,
-        "required": True,
-        "help": "Add a Reoon (free 600/mo), ZeroBounce, or Hunter key in Settings — "
-                "without one, found emails stay 'guess' and are never sent.",
+        "id": "verifier", "label": "Local verification ready",
+        "done": True,
+        "required": False,
+        "help": "Direct DNS and SMTP verification is enabled.",
     })
 
     # 5. Config valid
@@ -303,7 +301,7 @@ async def get_setup_status():
         "id": "config", "label": f"Sellbird configured ({config_path.name})",
         "done": config_valid,
         "required": True,
-        "help": "Train Sellbird on your product. Use the trainer or set up manually through Claude.",
+        "help": "Train Sellbird on your product. Use the trainer or set up manually.",
     })
 
     # 6. Product trained
@@ -312,7 +310,7 @@ async def get_setup_status():
         "id": "product_trained", "label": "Product knowledge trained",
         "done": product_trained,
         "required": True,
-        "help": "Run: sellbird train https://yourwebsite.com (or set up through Claude).",
+        "help": "Run: sellbird train https://yourwebsite.com (or set up manually).",
     })
 
     # 7. LinkedIn (optional)
@@ -325,38 +323,7 @@ async def get_setup_status():
         "help": "Optional. Enter your LinkedIn credentials in Settings to enable LinkedIn prospecting.",
     })
 
-    # 8. Cloudflare (optional)
-    cf_id = env_vars.get("CLOUDFLARE_ACCOUNT_ID", "") or os.getenv("CLOUDFLARE_ACCOUNT_ID", "")
-    cf_token = env_vars.get("CLOUDFLARE_API_TOKEN", "") or os.getenv("CLOUDFLARE_API_TOKEN", "")
-    checks.append({
-        "id": "cloudflare", "label": "Cloudflare deep crawling",
-        "done": bool(cf_id) and bool(cf_token),
-        "required": False,
-        "help": "Optional. For JavaScript-rendered website crawling during training.",
-    })
 
-    # 9. Warmup service: TrulyInbox connected, or another service the user named
-    from sellbird.integrations import trulyinbox as ti
-    try:
-        state = _state()
-        await state.init_db()
-        choice = await ti.get_choice(state)
-    except Exception:
-        choice = ""
-    if _has("TRULYINBOX_API_KEY"):
-        choice = "connected"
-    checks.append({
-        "id": "warmup_service",
-        "label": {"connected": "Warmup: TrulyInbox connected",
-                  "other": "Warmup: your own warmup service"}.get(choice, "Warm up your mailbox"),
-        "done": bool(choice),
-        # Instantly warms its own accounts, so there it's a suggestion, not a step.
-        "required": provider != "instantly",
-        "help": ("A new mailbox needs 2-4 weeks of warmup before cold email, and warmup "
-                 "keeps it out of spam after that. We recommend TrulyInbox: connect it and "
-                 "Sellbird shows whether your mailbox is warmed."),
-        "link": ti.AFFILIATE_URL,
-    })
 
     required_checks = [c for c in checks if c["required"]]
     completed_required = sum(1 for c in required_checks if c["done"])
@@ -387,12 +354,10 @@ async def get_settings():
     env_vars = _read_env_file()
     all_keys = [
         "INSTANTLY_API_KEY", "LINKEDIN_EMAIL", "LINKEDIN_PASSWORD",
-        "CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN",
         "GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET",
         "SMTP_HOST", "SMTP_PORT", "SMTP_USERNAME", "SMTP_PASSWORD",
         "IMAP_HOST", "IMAP_PORT", "IMAP_USERNAME", "IMAP_PASSWORD",
         "M365_CLIENT_ID", "M365_TENANT_ID",
-        "REOON_API_KEY", "ZEROBOUNCE_API_KEY", "HUNTER_API_KEY",
     ]
     for key in all_keys:
         if key not in env_vars:
@@ -411,8 +376,7 @@ async def get_settings():
         "instantly_api_key_set": is_set("INSTANTLY_API_KEY"),
         "linkedin_email": env_vars.get("LINKEDIN_EMAIL", ""),
         "linkedin_password_set": is_set("LINKEDIN_PASSWORD"),
-        "cloudflare_account_id": env_vars.get("CLOUDFLARE_ACCOUNT_ID", ""),
-        "cloudflare_api_token_set": is_set("CLOUDFLARE_API_TOKEN"),
+
         "gmail_client_id": env_vars.get("GMAIL_CLIENT_ID", ""),
         "gmail_client_secret_set": is_set("GMAIL_CLIENT_SECRET"),
         "gmail_authorized": gmail_token,
@@ -429,9 +393,7 @@ async def get_settings():
         "m365_client_id": env_vars.get("M365_CLIENT_ID", ""),
         "m365_tenant_id": env_vars.get("M365_TENANT_ID", ""),
         "m365_authorized": (PROJECT_ROOT / "data" / "m365_token.json").is_file(),
-        "reoon_api_key_set": is_set("REOON_API_KEY"),
-        "zerobounce_api_key_set": is_set("ZEROBOUNCE_API_KEY"),
-        "hunter_api_key_set": is_set("HUNTER_API_KEY"),
+
     }
 
 
@@ -447,12 +409,10 @@ async def save_env_settings(request: Request):
     async with _env_lock:
         updates = {}
         for key in ["INSTANTLY_API_KEY", "LINKEDIN_EMAIL", "LINKEDIN_PASSWORD",
-                     "CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN",
                      "GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET",
                      "SMTP_HOST", "SMTP_PORT", "SMTP_USERNAME", "SMTP_PASSWORD",
                      "IMAP_HOST", "IMAP_PORT", "IMAP_USERNAME", "IMAP_PASSWORD",
-                     "M365_CLIENT_ID", "M365_TENANT_ID",
-                     "REOON_API_KEY", "ZEROBOUNCE_API_KEY", "HUNTER_API_KEY"]:
+                     "M365_CLIENT_ID", "M365_TENANT_ID"]:
             if key in data and data[key] is not None:
                 value = data[key]
                 if isinstance(value, bool) or not isinstance(value, (str, int, float)):
@@ -479,225 +439,6 @@ async def save_env_settings(request: Request):
             for key in ("GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET", "M365_CLIENT_ID", "M365_TENANT_ID"):
                 if key in updates:
                     os.environ[key] = updates[key]
-    return {"success": True}
-
-
-@app.post("/api/trulyinbox/connect")
-async def trulyinbox_connect(request: Request):
-    """Check a TrulyInbox key against the sending mailbox, then save it to .env."""
-    from sellbird import deliverability as d
-    from sellbird.integrations import trulyinbox as ti
-    try:
-        data = await request.json()
-    except Exception:
-        data = None
-    key = data.get("key") if isinstance(data, dict) else None
-    if not isinstance(key, str) or not key.strip() or len(key) > 512:
-        return JSONResponse({"success": False, "message": "Paste your TrulyInbox API key."},
-                            status_code=400)
-    key = key.strip()
-    try:
-        from sellbird.config import load_config
-        config = load_config()
-        address, warmup = ti.sending_address(config), config.channels.email.warmup
-    except Exception:
-        address, warmup = "", None
-    if not address:
-        return JSONResponse({"success": False, "message": ti.NO_ADDRESS}, status_code=400)
-    workspace = (_read_env_file().get("TRULYINBOX_WORKSPACE_ID", "")
-                 or os.getenv("TRULYINBOX_WORKSPACE_ID", "")).strip()
-    ti.forget_rejected(key)
-    try:
-        client = ti.TrulyInbox(key, workspace)
-        health = await client.mailbox_health(address)
-    except ti.TrulyInboxError as e:
-        return JSONResponse({"success": False, "message": str(e)}, status_code=400)
-    updates = {"TRULYINBOX_API_KEY": key}
-    if not workspace:
-        updates["TRULYINBOX_WORKSPACE_ID"] = client.workspace_id
-    async with _env_lock:
-        try:
-            _write_env_file(updates)
-        except Exception as e:
-            logger.warning("Failed to write .env: %s", e)
-            return {"success": False, "message": "Could not write .env file."}
-    state = _state()
-    await state.init_db()
-    await ti.set_choice(state, "connected")
-    return {"success": True, "message": d.check_warmup_service(health, warmup).detail}
-
-
-@app.get("/api/rename-notice")
-async def get_rename_notice():
-    """Whether to say "Harvey is now Sellbird": once, after an upgrade moved files."""
-    from sellbird import legacy
-    return {"show": legacy.welcome_pending(legacy.PROJECT_ROOT)}
-
-
-@app.post("/api/rename-notice/dismiss")
-async def dismiss_rename_notice():
-    from sellbird import legacy
-    legacy.dismiss_welcome(legacy.PROJECT_ROOT)
-    return {"success": True}
-
-
-@app.post("/api/trulyinbox/other")
-async def trulyinbox_other():
-    """The user warms their mailbox with another service: stop recommending one."""
-    from sellbird.integrations import trulyinbox as ti
-    state = _state()
-    await state.init_db()
-    await ti.set_choice(state, "other")
-    return {"success": True}
-
-
-# ── Your offer: what every first email ends by offering (sellbird.offer) ──
-
-def _offer_config_file() -> Path:
-    """Where the offer is saved. The tracked sellbird.yaml template stays
-    untrained: your offer goes in the gitignored sellbird.local.yaml, which
-    then holds your whole config (as `sellbird train` does)."""
-    target = _resolve_config_file()
-    if target.name == "sellbird.yaml":
-        local = target.with_name("sellbird.local.yaml")
-        if not local.exists():
-            shutil.copyfile(target, local)
-        target = local
-    return target
-
-
-async def _offer_brain():
-    from sellbird.brain import Brain
-    from sellbird.config import load_config
-    config = load_config()
-    state = _state()
-    await state.init_db()
-    return Brain(state, config.brain), state, config
-
-
-@app.get("/api/offer")
-async def get_offer():
-    from sellbird.config import load_config
-    from sellbird.offer import offer_view
-    try:
-        return offer_view(load_config())
-    except Exception as e:
-        return JSONResponse({"error": f"Couldn't read your config: {e}"}, status_code=500)
-
-
-@app.post("/api/offer/suggest")
-async def suggest_offer():
-    """A few offers that fit your product. One model call; nothing is saved."""
-    from sellbird.offer import suggest_offers
-    try:
-        brain, _, config = await _offer_brain()
-        ideas = await suggest_offers(brain, config)
-    except Exception as e:
-        logger.warning(f"Offer suggestions failed: {e}")
-        return JSONResponse({"error": "Sellbird couldn't come up with offers just now. Try again."},
-                            status_code=502)
-    if not ideas:
-        return JSONResponse({"error": "Sellbird couldn't come up with offers just now. Try again."},
-                            status_code=502)
-    return {"ideas": ideas}
-
-
-@app.post("/api/offer/preview")
-async def preview_offer(request: Request):
-    """One real first email written with this offer. Nothing is saved or sent."""
-    from sellbird.offer import MAX_OFFER_CHARS, preview_email
-    body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
-    entry = " ".join(str((body or {}).get("entry") or "").split())[:MAX_OFFER_CHARS]
-    if not entry:
-        return JSONResponse({"ok": False, "message": "Write an offer first."}, status_code=400)
-    try:
-        brain, state, config = await _offer_brain()
-        return await preview_email(brain, state, config, entry)
-    except Exception as e:
-        logger.warning(f"Offer preview failed: {e}")
-        return JSONResponse({"ok": False, "message": "The preview failed. Try again."}, status_code=502)
-
-
-@app.post("/api/offer")
-async def save_offer_route(request: Request):
-    """Save the offer to product.offer.entry. The Writer reads it on its next run."""
-    from sellbird.offer import MAX_OFFER_CHARS, save_offer
-    body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
-    entry = " ".join(str((body or {}).get("entry") or "").split())[:MAX_OFFER_CHARS]
-    ideas = (body or {}).get("ideas")
-    ideas = [str(i) for i in ideas] if isinstance(ideas, list) else None
-    target = _offer_config_file()
-    try:
-        save_offer(target, entry, ideas)
-        from sellbird.offer import PROPOSED_KEY
-        state = _state()
-        await state.init_db()
-        await state.delete_setting(PROPOSED_KEY)
-    except Exception as e:
-        return JSONResponse({"success": False, "message": f"Couldn't save to {target.name}: {e}"},
-                            status_code=500)
-    return {"success": True, "entry": entry,
-            "message": "Saved. Every new first email ends with this offer." if entry
-                       else "Saved. With no offer, first emails end with a question."}
-
-
-@app.get("/api/company")
-async def get_company():
-    """Your company: everything Sellbird writes from, and any offer your agent proposed."""
-    from sellbird.config import load_config
-    from sellbird.offer import PROPOSED_KEY, company_view
-    try:
-        state = _state()
-        await state.init_db()
-        raw = await state.get_setting(PROPOSED_KEY)
-        proposed = json.loads(raw) if raw else None
-        return company_view(load_config(), PROJECT_ROOT, proposed)
-    except Exception as e:
-        return JSONResponse({"error": f"Couldn't read your config: {e}"}, status_code=500)
-
-
-@app.post("/api/company")
-async def save_company_route(request: Request):
-    """Save one edited section of Your company to the config file."""
-    from sellbird.offer import save_company
-    body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
-    section = str((body or {}).get("section") or "")
-    fields = (body or {}).get("fields")
-    if not isinstance(fields, dict) or not fields:
-        return JSONResponse({"success": False, "message": "Nothing to save."}, status_code=400)
-    try:
-        save_company(_offer_config_file(), section, fields)
-    except ValueError as e:
-        return JSONResponse({"success": False, "message": f"Not saved: {e}."}, status_code=400)
-    except Exception as e:
-        return JSONResponse({"success": False, "message": f"Couldn't save: {e}"}, status_code=500)
-    return {"success": True, "message": "Saved. New emails use it from the next draft."}
-
-
-@app.post("/api/offer/propose")
-async def propose_offer(request: Request):
-    """Your agent's proposed offer, waiting for you to use or dismiss it on
-    Your company. Proposing changes nothing that's sent."""
-    from sellbird.offer import MAX_OFFER_CHARS, PROPOSED_KEY
-    body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
-    entry = " ".join(str((body or {}).get("entry") or "").split())[:MAX_OFFER_CHARS]
-    why = " ".join(str((body or {}).get("why") or "").split())[:500]
-    if not entry:
-        return JSONResponse({"ok": False, "message": "An offer is required."}, status_code=400)
-    state = _state()
-    await state.init_db()
-    await state.set_setting(PROPOSED_KEY, json.dumps({"entry": entry, "why": why,
-                                                      "at": datetime.now(timezone.utc).isoformat()}))
-    return {"ok": True, "message": "Proposed. The user confirms it on the Your company tab "
-                                    "(dashboard → Your company → Your offer → Use this offer)."}
-
-
-@app.delete("/api/offer/propose")
-async def dismiss_proposed_offer():
-    from sellbird.offer import PROPOSED_KEY
-    state = _state()
-    await state.init_db()
-    await state.delete_setting(PROPOSED_KEY)
     return {"success": True}
 
 
@@ -893,12 +634,7 @@ async def start_sellbird():
     # Ensure data dir exists
     (PROJECT_ROOT / "data").mkdir(parents=True, exist_ok=True)
 
-    # The native Claude CLI installer puts claude in ~/.local/bin without
-    # always adding it to PATH; the heartbeat can't think without it.
     env = os.environ.copy()
-    local_bin = Path.home() / ".local" / "bin"
-    if not shutil.which("claude") and local_bin.is_dir():
-        env["PATH"] = str(local_bin) + os.pathsep + env.get("PATH", "")
 
     try:
         log_handle = open(LOG_FILE, "a", encoding="utf-8")
@@ -1056,11 +792,10 @@ async def get_stats():
         # get_usage_today use date.today()); SQLite's date('now') is UTC and
         # can select a different day's counts on either side of UTC midnight.
         usage = await query_db(
-            "SELECT claude_calls, codex_calls FROM usage_log WHERE date = ?",
+            "SELECT calls FROM usage_log WHERE date = ?",
             (date.today().isoformat(),),
         )
-        usage_today = (usage[0]["claude_calls"] or 0) if usage else 0
-        codex_today = (usage[0]["codex_calls"] or 0) if usage else 0
+        usage_today = (usage[0]["calls"] or 0) if usage else 0
 
         return {
             "prospects": {"total": prospect_total, "by_status": prospect_map},
@@ -1068,8 +803,8 @@ async def get_stats():
             "conversations": {"total": sum(convo_map.values()), "by_status": convo_map},
             "pipeline": pipeline,
             "actions_total": action_count,
-            "claude_calls_today": usage_today,
-            "codex_calls_today": codex_today,
+            "calls_today": usage_today,
+            "brain_calls_today": usage_today,
             "brain_provider": _active_provider(),
             "brain_status": await _brain_status(),
         }
@@ -1100,11 +835,10 @@ def _active_brain():
 
 async def _brain_status() -> dict:
     """Last recorded brain health transition ({} if none): lets the
-    dashboard say "Codex paused: <why>" instead of looking healthy."""
+    dashboard say "Brain paused: <why>" instead of looking healthy."""
     from sellbird.brain import BRAIN_STATUS_KEY, active_brain_status
     rows = await query_db("SELECT value FROM settings WHERE key = ?", (BRAIN_STATUS_KEY,))
-    # Only the configured provider's health (a stale Codex pause isn't
-    # Claude's).
+    # Only the configured provider's health.
     return active_brain_status(rows[0]["value"], _active_provider()) if rows else {}
 
 
@@ -1114,20 +848,7 @@ def _active_provider() -> str:
 
 
 def _quota_client_for(provider: str, model: str = ""):
-    """One cached quota reader per provider (and Codex model). Each reads
-    only its own subscription, so a Claude gauge is never shown as Codex or
-    vice versa, and Codex shows the bucket metering the configured model."""
-    key = (provider, model if provider == "codex" else "")
-    if key not in _quota_clients:
-        if provider == "codex":
-            from sellbird.codex import CodexClient, CodexQuotaClient
-            _quota_clients[key] = CodexQuotaClient(CodexClient(model=model))
-        elif provider == "claude":
-            from sellbird.integrations.quota import QuotaClient
-            _quota_clients[key] = QuotaClient()
-        else:
-            return None
-    return _quota_clients[key]
+    return None
 
 
 @app.get("/api/usage")
@@ -2426,7 +2147,7 @@ async def get_today():
         # Ordered by how much it blocks Sellbird from doing anything at all.
         brain = await _brain_status()
         if brain.get("status") == "paused":
-            who = "Codex" if brain.get("provider") == "codex" else "Sellbird's model"
+            who = "Brain"
             items.append({
                 "key": "brain-paused", "tone": "bad",
                 "title": f"{who} is paused, so Sellbird is waiting",
@@ -2464,23 +2185,7 @@ async def get_today():
                 "action": "Review and resume", "tab": "outbox",
             })
 
-        # Cold email waiting on the optional Precleared check: its free
-        # checks ran out, the key was rejected, or it couldn't be reached.
-        from sellbird.integrations.precleared import current_hold, hold_message
-        try:
-            from sellbird.config import load_config
-            loaded = load_config(str(_resolve_config_file()))
-        except Exception:
-            loaded = None  # can't judge: show the hold rather than hide it
-        precleared_hold = await current_hold(state, loaded)
-        if precleared_hold:
-            message = hold_message(precleared_hold)
-            items.append({
-                "key": "precleared-hold", "tone": message["tone"],
-                "title": message["title"], "detail": message["detail"],
-                "action": "Open the log", "tab": "controls",
-                "url": message["url"], "url_label": message["url_label"],
-            })
+
 
         setup = await get_setup_status()
         if isinstance(setup, dict) and setup.get("percent", 100) < 100:

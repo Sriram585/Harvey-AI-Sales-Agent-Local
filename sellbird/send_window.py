@@ -15,10 +15,8 @@ The recipient's zone comes from what Sellbird already knows, in this order:
 2. the coordinates discovery cached when it geocoded that location (the
    ``geo:<place>`` settings), for a country with several zones or a place
    given without its country;
-3. the recipient's country as Precleared worked it out from the address,
-   company records or the company's website, when the optional compliance
-   check is on;
-4. ``compliance.precleared.prospect_country``.
+3. the recipient's country worked out from the address or company records;
+4. ``compliance.prospect_country``.
 
 A country with several zones and nothing more specific gets its main zone
 (MAIN_ZONE: Sydney for Australia, Moscow for Russia), except the US, which
@@ -29,24 +27,11 @@ zone is stored on the prospect, so it is worked out once (unless a country
 found later could still change it; see ``recipient_zone``).
 
 A code that is a state or province and a country too ("Berlin, DE",
-"Mumbai, IN", "St. John's, NL", "Adelaide, SA") is settled by Precleared's
+"Mumbai, IN", "St. John's, NL", "Adelaide, SA") is settled by the resolved
 country, the cached coordinates or ``prospect_country``. With none of
 those, a US state code reads as the state and any other as the country, and
 that guess isn't stored. Writing the country out ("Berlin, Germany") always
 works.
-
-The same reading gives Precleared the recipient's country, when the check
-is on (``recipient_country``). Only a country Sellbird is sure of goes: one
-named in the location, the country of a state or province named there, a
-code that is a region and a country too once nearby cached coordinates settle
-it. A stored time zone alone has no country provenance and does not count.
-A code read by convention alone, a state reading the coordinates
-contradict, and coordinates by themselves (the nearest reference city can
-be over a border) send nothing, because Precleared takes the country it is
-given as settled, and a wrong one is worse than none. Without one,
-``prospect_country`` or the one country every ``icp.geography`` entry is in
-goes as a default Precleared uses only when its own lookups show nothing
-(``icp_country``).
 """
 
 import math
@@ -409,8 +394,8 @@ def zone_for(location: str = "", country: str = "", point: str = "") -> str:
     """The IANA time zone for a recipient, or "" when it can't be told.
 
     ``location`` is free text such as a company's address or "Denver, CO";
-    ``country`` a two-letter code known from elsewhere (Precleared's answer
-    or the configured prospect country); ``point`` the "lat,lon" discovery
+    ``country`` a two-letter code known from elsewhere
+    or the configured prospect country; ``point`` the "lat,lon" discovery
     cached for the location. A state or country written in the location
     wins over ``country``.
     """
@@ -425,8 +410,7 @@ def _country(parts: list[str], coords=None, hint: str = "") -> tuple[str, bool]:
     code = "" if text_country else _ambiguous_code(parts)
     if not code:
         return text_country, False
-    # "IN": Indiana or India? A country from elsewhere (Precleared's is
-    # stronger evidence than a code) settles it, even when it is neither,
+    # "IN": Indiana or India? A country from elsewhere settles it, even when it is neither,
     # then the coordinates; otherwise a US state is read as the state
     # and a province or Australian state code as the country.
     home = REGION_COUNTRY[code]
@@ -559,16 +543,14 @@ def next_send_time(after: datetime, zone: str, window, rng=None) -> datetime:
 
 def _prospect_country(config) -> str:
     compliance = getattr(config, "compliance", None)
-    precleared = getattr(compliance, "precleared", None)
-    return country_code(getattr(precleared, "prospect_country", ""))
+    return country_code(getattr(compliance, "prospect_country", ""))
 
 
 def icp_country(config) -> str:
     """The one country every ``icp.geography`` entry is certainly in, or "".
 
-    Precleared's default when ``prospect_country`` is unset: the ICP is
-    where discovery looked. A default only, so Precleared's own finding
-    still wins."""
+    Default when ``prospect_country`` is unset: the ICP is
+    where discovery looked."""
     icp = getattr(config, "icp", None)
     coords = getattr(icp, "geo_coordinates", None) or {}
     found = set()
@@ -594,25 +576,20 @@ async def _place(state, prospect) -> tuple[str, str]:
 
 
 async def recipient_country(state, prospect) -> str:
-    """The recipient's country when Sellbird is sure of it, for Precleared's
-    ``recipient_country``; "" otherwise, since a guess sent as fact would
-    override Precleared's own evidence. See ``country_for``."""
+    """The recipient's country when Sellbird is sure of it; "" otherwise. See ``country_for``."""
     if prospect is None:
         return ""
     location, point = await _place(state, prospect)
     country, certain = country_for(location, point)
     if certain:
         return country
-    # A stored zone may come from approximate coordinates or stale location
-    # data. Without provenance, it must not override Precleared's evidence.
     return ""
 
 
 async def recipient_zone(state, prospect, config, country: str = "") -> str:
     """This recipient's zone, worked out once and stored on the prospect.
 
-    ``country`` is the recipient's country from Precleared, when a check
-    returned one. Returns "" when nothing settles it."""
+    ``country`` is the recipient's country, when resolved. Returns "" when nothing settles it."""
     if prospect is None:
         return ""
     if getattr(prospect, "timezone", ""):
@@ -623,7 +600,7 @@ async def recipient_zone(state, prospect, config, country: str = "") -> str:
         prospect.timezone = zone
         await state.set_prospect_timezone(prospect.id, zone)
         return zone
-    # Not stored while a country found later (Precleared's) could still
+    # Not stored while a country found later could still
     # change it: a zone only the configured prospect_country settles, or a
     # code that is a state and a country ("Berlin, DE") read by convention.
     fallback = _prospect_country(config)
