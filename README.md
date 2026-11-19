@@ -1,185 +1,153 @@
-<p align="center">
-  <a href="https://sellbird.ai">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="docs/brand/sellbird-wordmark-white.svg">
-      <img src="docs/brand/sellbird-wordmark.svg" alt="Sellbird" width="300">
-    </picture>
-  </a>
-</p>
+# Harvey AI Sales Agent (Local) — Multi-Product Autonomous Sales Engine
 
-<p align="center"><strong>The open-source outreach platform that runs on your local AI.</strong></p>
+> **100% Local. Zero Cloud Inference Cost (\$0.00). Strict Offline Air-Gap Compliance.**
 
-<p align="center">
-Sellbird finds companies that need what you sell, finds the person who decides, checks their email address, writes each one a personal cold email, sends it and handles the replies.
-It runs on your own machine, and by default nothing goes out until you approve it.
-</p>
+Harvey AI Sales Agent (Local) is an open-source, private sales operations platform extending Sellbird into an air-gapped, multi-product autonomous agent. Built for engineering and operations platforms, it eliminates external AI APIs (OpenAI, Anthropic, Gemini, Serper) and paid SaaS subscriptions (Apollo, Instantly, Lemlist), running entirely on local consumer hardware via **Ollama** and **sentence-transformers**.
 
-<p align="center">
-  <a href="https://x.com/sellbirdagent"><img alt="Follow @sellbirdagent on X" src="https://img.shields.io/badge/follow-%40sellbirdagent-000000?logo=x&logoColor=white"></a>
-  <a href="https://github.com/ethanplusai/sellbird/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/ethanplusai/sellbird?style=flat&logo=github&label=stars&color=244b62&cacheSeconds=3600"></a>
-  <a href="https://github.com/ethanplusai/sellbird/actions/workflows/tests.yml"><img alt="Tests" src="https://github.com/ethanplusai/sellbird/actions/workflows/tests.yml/badge.svg"></a>
-  <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-244b62"></a>
-  <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-244b62?logo=python&logoColor=white">
-  <a href="https://sellbird.ai"><img alt="Hosted at sellbird.ai" src="https://img.shields.io/badge/hosted-sellbird.ai-244b62"></a>
-  <a href="https://sellbird.ai/harvey/"><img alt="Formerly Harvey" src="https://img.shields.io/badge/formerly-Harvey-8aa0ad"></a>
-</p>
+---
 
-<p align="center">
-  <a href="https://trendshift.io/repositories/303676?utm_source=repository-badge&amp;utm_medium=badge&amp;utm_campaign=badge-repository-303676" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/repositories/303676" alt="ethanplusai%2Fsellbird | Trendshift" width="250" height="55"/></a>
-</p>
+## Key Highlights & Core Differentiators
 
-> **[Harvey is now Sellbird.](https://sellbird.ai/harvey/)** Same project, same history, new name. Already running Harvey? Your setup carries over: see [Upgrading from Harvey](#upgrading-from-harvey).
+1. **Multi-Product Fit Matrix:**
+   Instead of a single product pitch, evaluates each prospect against the entire product catalog (`CloudCost Guard`, `PipeGuard`, `ShiftSync`) using local `sentence-transformers/all-MiniLM-L6-v2` dense embeddings, automatically computing primary fit and secondary cross-sell candidates.
+2. **Anti-Hallucination Evidence Grounding:**
+   Extracts buying signals with verbatim evidence quotes from public text, verified via deterministic Python substring and sliding-window `difflib` matching (`verify_quote_grounding`). Prevents hallucinated claims from entering problem statements and emails.
+3. **Resilient Failure Handling & Durable Task Queue:**
+   When Ollama is offline or restarting, zero data leaves the machine. Executes deterministic keyword and embedding fallbacks, enqueues the pending AI job into SQLite `task_queue`, returns HTTP 503, and drains automatically upon Ollama recovery.
+4. **Adaptive Hardware Profiling:**
+   Detects CPU cores, system RAM, and GPU VRAM via `psutil` and `torch.cuda`/`nvidia-smi`, automatically recommending the optimal local model (`standard_laptop` for CPU laptops vs `high_performance` for workstations).
+5. **100% Offline-Renderable Monochrome UI:**
+   Pure black-and-white minimalist dashboard served at `http://127.0.0.1:8000/local` with vendored Geist fonts and zero external CDN or Google Fonts calls.
 
-**New releases, features and the roadmap go out first on X: [follow @sellbirdagent](https://x.com/sellbirdagent).**
+---
 
-**Prefer not to run it yourself? [sellbird.ai](https://sellbird.ai) is the hosted version, with sending domains, inboxes and warmup set up for you. It's in early access.**
-
-![Sellbird's dashboard: the Today screen, a conversation that needs you, approving a drafted reply in the Outbox, the signals to confirm, searching contacts, then dark mode](docs/dashboard.gif)
-
-<sub>The demo data is invented: "Bookwell" selling online booking to roofers, dental practices and HVAC shops, on `.test` domains.</sub>
-
-## What it does
-
-Sellbird is a pipeline you can run end to end, or stop at any step.
-
-| | What happens | More |
-|---|---|---|
-| **Find companies** | Searches for businesses that match your customer: free on OpenStreetMap, or on a paid source you pick. Every paid search shows its cost before it runs. | [Discovery](docs/signals-and-pipeline.md#1-discover--who-exists) |
-| **Learn why they'd buy** | Reads each company's own website for the buying signals you confirmed, like no online booking, ads running or a role they're hiring for. No model calls, no cost. | [Signals](docs/signals-and-pipeline.md) |
-| **Find who decides** | Finds the owner or manager named on the company's own pages, two people per company at most. | [Enrich](docs/signals-and-pipeline.md#3-enrich--who-decides) |
-| **Check the address** | Learns the company's email pattern and verifies one address. Every address is marked verified, risky, guess or invalid, and only deliverable ones are ever sent to. | [Verify](docs/signals-and-pipeline.md#4-verify--can-you-reach-them) |
-| **Write and send** | Writes a short sequence for each person from what it found, then sends from your Gmail, Microsoft 365 or SMTP mailbox inside your daily limit and their office hours. | [Sending](docs/approval-and-sending.md) |
-| **Handle replies** | Reads every reply, drafts an answer, sets auto-replies aside, honours opt-outs at once, and hands you anything it shouldn't answer alone. | [Dashboard](docs/dashboard.md) |
-
-Only want the list? Stop after verifying and run `sellbird export` for a sequencer-ready CSV of everything it found.
+## System Architecture
 
 ```
-$ sellbird run
-
-============================================================
-Sellbird is online.
-============================================================
-Checking pipeline state...
-Decision: write_campaign (3 new prospects with no drafts)
-  handler   → Elena Park, Harbor Dental Studio     interested, answer drafted
-  handler   → Priya Nair, Highline Roofing         objection, answer drafted
-  writer    → 2-email sequence: Phoenix HVAC hiring a dispatcher
-  outbox    → 5 emails waiting for your approval
-Cycle complete. Sleeping for 15 minutes.
+[ Public Web URL ]
+        │ (Optional live scrape via httpx + BeautifulSoup4 + Playwright)
+        ▼
+[ SQLite Database: data/local_sales_agent.db (12 Tables) ]
+        ▲
+        │  (StrictOfflineSandbox: Enforces loopback 127.0.0.1 only)
+        ▼
+[ Local AI Engine ]
+  ├── Hardware Profiler (psutil + torch.cuda / nvidia-smi)
+  ├── Local Vector Embeddings (all-MiniLM-L6-v2 @ local_models/)
+  ├── Native Ollama Client (http://127.0.0.1:11434, keep_alive: 30m)
+  ├── 8 Core Workflows + Reply Triage Sandbox
+  └── Durable Task Queue (SQLite task_queue)
+        ▲
+        ▼
+[ Local Web Dashboard: http://127.0.0.1:8000/local ]
 ```
 
-## No model API bill
+---
 
-Sellbird thinks through your local AI models. There are zero external API keys and zero per-token billing, running completely private on your hardware.
+## Quickstart & Reproducible Setup
 
-| | |
-|---|---|
-| Local AI Model | completely free and private on your hardware |
-| Finding businesses | **$0** on the default source, or about $0.37 per 1,000 on the cheapest paid one |
-| Reading their websites | **$0**: three HTTP requests each, no model call |
-| Writing and sending | your subscription and a mailbox (about $7 a month for Google Workspace) |
-| Prospecting tools | **None.** No Apollo, ZoomInfo, Clearbit or Clay. |
+### Prerequisites
+- **Python 3.11 or 3.12**
+- **Ollama** installed ([ollama.ai](https://ollama.ai))
 
-How the loop, the budget and the isolation work: [How Sellbird works](docs/how-it-works.md).
+### Windows (PowerShell)
 
-## Quick start
+```powershell
+# 1. Clone repository & create virtual environment
+git clone https://github.com/malladi-101/Harvey-AI-Sales-Agent-Local.git
+cd Harvey-AI-Sales-Agent-Local
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 
-You need:
+# 2. Install dependencies
+pip install -r requirements.txt
 
-- **Python 3.11 or newer.** macOS ships 3.9, so run `brew install python@3.13` first if `python3 --version` says so.
-- **Local AI** running on your computer.
-- **A mailbox to send from**, ideally Google Workspace on a separate sending domain. [Microsoft 365](docs/microsoft365.md) and SMTP work too.
+# 3. Pull recommended local model in Ollama
+ollama pull qwen2.5:1.5b
+# or: ollama pull qwen3:4b
 
-### Setup
+# 4. Cache local embedding model (sentence-transformers/all-MiniLM-L6-v2)
+python scripts/setup_models.py
+
+# 5. Populate SQLite with rich seed data (Vanguard Ops AI + 3 Products + 6 Prospects)
+python scripts/seed_demo_data.py
+
+# 6. Launch the Local Sales Agent Dashboard
+python scripts/run_local_agent.py
+```
+
+### macOS / Linux (Bash)
 
 ```bash
-# 1. Install. Use python3.13, not python3: on macOS bare python3 is 3.9.
-python3.13 -m venv .venv && source .venv/bin/activate && pip install -e .
+# 1. Clone repository & create virtual environment
+git clone https://github.com/malladi-101/Harvey-AI-Sales-Agent-Local.git
+cd Harvey-AI-Sales-Agent-Local
+python3 -m venv .venv
+source .venv/bin/activate
 
-# 2. Add credentials. Every variable is documented inline.
-cp .env.example .env && $EDITOR .env
+# 2. Install dependencies
+pip install -r requirements.txt
 
-# 3. Learn your product from your website (writes sellbird.local.yaml).
-sellbird train https://your-company.com
+# 3. Pull recommended local model in Ollama
+ollama pull qwen2.5:1.5b
+# or: ollama pull qwen3:4b
 
-# 4. Confirm what makes a good prospect.
-sellbird signals --confirm free
+# 4. Cache local embedding model
+python3 scripts/setup_models.py
 
-# 5. Find businesses. The default source is free and needs no account.
-sellbird discover
+# 5. Seed demo data
+python3 scripts/seed_demo_data.py
 
-# 6. Open the dashboard and start the loop.
-sellbird dashboard          # prints a private link to http://127.0.0.1:5555
-sellbird run
+# 6. Launch dashboard
+python3 scripts/run_local_agent.py
 ```
 
-On Linux you can also [run it with Docker](docs/docker.md).
+Open your browser to: **`http://127.0.0.1:8000/local`**
 
-## Nothing sends without you
+---
 
-Every outgoing email waits in the Outbox for your approval until you turn on autopilot yourself. Before anything leaves, a pre-send check with no model involved rejects unfilled merge tags, banned phrases, overlong emails, extra links and undeliverable addresses. Autopilot still holds back any email that links to a domain that isn't yours or quotes Sellbird's own instructions. `sellbird sending pause` stops everything at once.
+## Automated Offline Acceptance Verification
 
-Details: [Approval and sending](docs/approval-and-sending.md) and [Legal and deliverability](docs/deliverability.md).
-
-## Upgrading from Harvey
-
-Harvey was renamed Sellbird in 0.4.0. Your configuration, data and dashboard sign-in carry over:
+You can verify full offline compliance even with your computer's Wi-Fi / Ethernet completely disconnected:
 
 ```bash
-git pull
-pip install -e .        # once, to get the new `sellbird` command
-sellbird dashboard
+python scripts/verify_offline.py
 ```
 
-- On first run Sellbird renames `harvey.local.yaml` to `sellbird.local.yaml` and `data/harvey.db` (and its log) to `data/sellbird.*`. It never overwrites a file that already exists under the new name, and waits if a Harvey process is still running from the folder. Stop that first.
-- `HARVEY_*` environment variables still work when the `SELLBIRD_*` one isn't set; rename them when convenient.
-- The `harvey` command and `python -m harvey` still work for now and say they moved. They will be removed in a later release.
-- If you edited the tracked `harvey.yaml` directly, `git pull` stops with "your local changes would be overwritten". Run `git stash`, `git pull`, then `git stash pop`. Git carries your edits into `sellbird.yaml`. If it reports a conflict there, keep your lines, delete the conflict markers, and run `git stash drop`. Better still, put your settings in `sellbird.local.yaml`, which git never touches.
-- Docker: the service is now `sellbird`. Run `docker compose down`, `git pull`, `docker compose build`, then `docker compose up -d`. `HARVEY_UID`/`HARVEY_GID` are still read.
+This automated suite:
+1. Runs inside `StrictOfflineSandbox()` (raising `ExternalNetworkBlockedError` if any non-loopback socket connection is attempted).
+2. Executes all 8 sales workflows and differentiators end-to-end.
+3. Simulates an Ollama outage, verifies deterministic fallbacks and task queueing.
+4. Restores Ollama and drains the queue.
+5. Writes the audit report to `docs/offline_acceptance_report.json` with `"external_network_calls": 0`.
 
-Links to `github.com/ethanplusai/harvey` keep working: GitHub redirects them here.
+---
 
-## Where your files live
+## Running the Automated Test Suite
 
-Your config, knowledge and data live in one home folder. Which one, first match wins:
+Run all 24 unit and integration tests across local AI, SQLite storage, workflows, and the UI:
 
-1. `SELLBIRD_HOME`, if you set it (the Docker image sets it to `/app`).
-2. A checkout: the checkout folder itself, as before.
-3. Otherwise, for an installed package (`pip` or `pipx`), your user data folder:
+```bash
+pytest tests/test_local_ai.py tests/test_local_store.py tests/test_workflows.py tests/test_local_ui.py -v
+```
 
-| | Home folder |
-|---|---|
-| macOS | `~/Library/Application Support/sellbird` |
-| Windows | `%APPDATA%\sellbird` |
-| Linux | `~/.local/share/sellbird` (or `$XDG_DATA_HOME/sellbird`) |
+---
 
-Inside it are `sellbird.yaml` (and `sellbird.local.yaml` once you train), `.env`,
-`prompts/` and `skills/`, all yours to edit. An installed package copies the defaults in on
-first run and never overwrites them, so your edits survive upgrades. `data/` holds the
-database, the logs and the dashboard token.
+## Known Limitations & Simulated/Seeded Components
 
-## Documentation
+To maintain strict compliance with privacy, zero-cost, and non-spam standards:
+1. **Outreach Emails Are Draft-Only:**
+   Generated cold emails are stored in SQLite with `status="draft_only"`. No external SMTP warmup engine or automated bulk delivery is included, eliminating spam and API delivery costs.
+2. **Seeded Prospects & Responses:**
+   6 realistic enterprise prospects (`ApexFin Systems`, `NovaPay Technologies`, etc.) and 6 sample prospect replies are pre-seeded in SQLite to enable instant, zero-leak offline testing without needing live internet access.
+3. **Web Scraper Boundary:**
+   Live public URL scraping (`sellbird/local_ai/scraper.py`) requires online access. When `STRICT_OFFLINE_MODE` is enabled, web scraping raises `OfflineModeError` to ensure zero unexpected internet calls occur during offline operation.
 
-| Guide | What's in it |
-|---|---|
-| [How Sellbird works](docs/how-it-works.md) | The heartbeat loop, the subscription budget, project structure and the ideas behind it |
-| [Signals and the prospecting pipeline](docs/signals-and-pipeline.md) | The 29 signals, cohorts, and the discover, profile, enrich and verify stages |
-| [Skills and sub-agents](docs/skills-and-agents.md) | The editable sales playbooks and which agent uses which |
-| [Approval and sending](docs/approval-and-sending.md) | The Outbox, autopilot, office hours and email signatures |
-| [The dashboard and the data](docs/dashboard.md) | Every screen, how sign-in works, and how the data is stored |
-| [Configuration and commands](docs/configuration.md) | `.env`, `sellbird.yaml` and every command |
-| [Extensions](docs/extensions.md) | Adding routes, heartbeat steps and commands from a separate package |
-| [Legal and deliverability](docs/deliverability.md) | The rules you're sending under, and warmup |
-| [Microsoft 365](docs/microsoft365.md) | Provider setup guides |
-| [Docker](docs/docker.md) · [Troubleshooting](docs/troubleshooting.md) · [Roadmap](docs/roadmap.md) | Running, fixing and what's next |
+---
 
-## Contributing
+## Licence
 
-Pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first: it covers keeping real contact data out of the repo, test email, and signing off your commits. Found a security problem? Follow [SECURITY.md](SECURITY.md) instead of opening an issue.
-
-See [CHANGELOG.md](CHANGELOG.md) for what changed in each release, and [follow @sellbirdagent on X](https://x.com/sellbirdagent) to hear about new ones first.
-
-## License
-
-Sellbird is licensed under the [GNU Affero General Public License v3.0](LICENSE). Harvey releases up to 0.3.x were released under MIT, and that code keeps its MIT notice in [NOTICE](NOTICE).
-
+- Upstream Sellbird core: **AGPL-3.0-only** (as of v0.4.0+).
+- Local AI subsystem, workflows, and documentation: Distributed under **AGPL-3.0-only**.
+- All bundled fonts (`Geist`, `Geist Mono`): **SIL Open Font License 1.1**.
+- Local embedding model (`all-MiniLM-L6-v2`): **Apache 2.0**.

@@ -2560,8 +2560,20 @@ async def static_file(path: str):
     )
 
 
+@app.get("/local", response_class=HTMLResponse)
+async def local_agent_dashboard():
+    """Serve the 100% offline Local Multi-Product AI Sales Agent UI."""
+    target = WEB_DIR / "local_agent.html"
+    if target.is_file():
+        return target.read_text(encoding="utf-8")
+    return HTMLResponse("<h1>Local Agent UI not found</h1>", status_code=404)
+
+
 @app.get("/", response_class=HTMLResponse)
 async def dashboard():
+    if os.getenv("LOCAL_AGENT_MODE", "1") == "1" and (WEB_DIR / "local_agent.html").is_file():
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url="/local")
     return (WEB_DIR / "index.html").read_text(encoding="utf-8")
 
 

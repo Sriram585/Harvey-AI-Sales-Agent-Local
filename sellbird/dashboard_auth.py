@@ -292,7 +292,7 @@ def is_loopback(host: str) -> bool:
 
 
 def is_public_path(method: str, path: str) -> bool:
-    if path.startswith("/api/local"):
+    if path.startswith("/api/local") or path == "/local":
         return True
     if method not in ("GET", "HEAD"):
         return False

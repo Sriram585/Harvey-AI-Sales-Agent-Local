@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Harvey AI — Local Multi-Product Sales Agent</title>
+  <link rel="stylesheet" href="/static/local_agent.css">
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Top Status Bar -->
+    <header class="top-bar">
+      <div class="brand-section">
+        <span class="brand-mark">&#9632;</span>
+        <span class="brand-name">HARVEY / SELLBIRD</span>
+        <span class="brand-badge">LOCAL AGENT</span>
+      </div>
+
+      <div class="status-items">
+        <!-- Hardware Profile -->
+        <div class="status-chip" id="hw-chip" title="Detected Local Hardware">
+          <span class="chip-label">TIER:</span>
+          <span class="chip-val" id="hw-tier">Detecting...</span>
+        </div>
+
+        <!-- Ollama Model Selector -->
+        <div class="status-chip">
+          <label for="model-select" class="chip-label">MODEL:</label>
+          <select id="model-select" class="clean-select">
+            <option value="qwen3:4b">qwen3:4b</option>
+          </select>
+        </div>
+
+        <!-- Ollama Health -->
+        <div class="status-chip">
+          <span class="chip-label">OLLAMA:</span>
+          <span class="health-badge status-offline" id="ollama-health">CHECKING</span>
+        </div>
+
+        <!-- Strict Offline Mode Switch -->
+        <div class="status-chip">
+          <label class="toggle-switch">
+            <input type="checkbox" id="offline-toggle">
+            <span class="toggle-slider"></span>
+          </label>
+          <span class="chip-label" style="margin-left: 6px;">STRICT OFFLINE</span>
+        </div>
+
+        <!-- Task Queue Count & Process Button -->
+        <div class="status-chip queue-chip">
+          <span class="chip-label">QUEUE:</span>
+          <span class="queue-count" id="queue-count">0</span>
+          <button id="btn-process-queue" class="btn-micro" title="Drain pending offline AI tasks">Process Queue</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Ollama Offline Failure Banner (Hidden by default, shown when offline or 503) -->
+    <div id="offline-banner" class="offline-banner hidden">
+      <div class="banner-content">
+        <span class="banner-icon">&#9888;</span>
+        <div class="banner-text">
+          <strong>OLLAMA OFFLINE — SAFE LOCAL FALLBACK ACTIVE</strong>
+          <p id="banner-msg">The native Ollama engine (http://127.0.0.1:11434) is currently unreachable. Zero external cloud APIs were called. Deterministic embeddings and scoring remain active, and pending jobs are queued in SQLite.</p>
+        </div>
+        <button id="btn-banner-retry" class="btn-secondary btn-sm">Retry Connection</button>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <nav class="nav-tabs">
+      <button class="nav-tab active" data-tab="tab-company">1. Company &amp; Products</button>
+      <button class="nav-tab" data-tab="tab-prospects">2. Prospects &amp; Cross-Product Fit</button>
+      <button class="nav-tab" data-tab="tab-replies">3. Reply Classifier</button>
+      <button class="nav-tab" data-tab="tab-telemetry">4. Telemetry &amp; Queue</button>
+    </nav>
+
+    <!-- Main Container -->
+    <main class="main-content">
+
+      <!-- TAB 1: Company & Multi-Product Setup -->
+      <section id="tab-company" class="tab-pane active">
+        <div class="section-header">
+          <div>
+            <h2 class="section-title">Company Profile &amp; Product Portfolio</h2>
+            <p class="section-sub">Configure your B2B SaaS organization and generate product-specific ICPs with local embeddings.</p>
+          </div>
+          <button id="btn-refresh-company" class="btn-secondary btn-sm">Reload Data</button>
+        </div>
+
+        <div class="two-col-grid">
+          <!-- Left: Company Info -->
+          <div class="panel">
+            <div class="panel-header">
+              <h3 class="panel-title">Parent Company</h3>
+              <button id="btn-gen-profile" class="btn-primary btn-sm">Generate Business Profile</button>
+            </div>
+            <div class="panel-body">
+              <div class="form-group">
+                <label>Company Name</label>
+                <input type="text" id="comp-name" class="clean-input" readonly>
+              </div>
+              <div class="form-group">
+                <label>Website</label>
+                <input type="text" id="comp-website" class="clean-input" readonly>
+              </div>
+              <div class="form-group">
+                <label>Raw Notes &amp; Capabilities</label>
+                <textarea id="comp-notes" class="clean-textarea" rows="4" readonly></textarea>
+              </div>
+              <div class="form-group">
+                <label>Synthesized Business Profile (JSON)</label>
+                <pre id="comp-profile-json" class="code-block">Loading profile...</pre>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right: Multi-Product Portfolio -->
+          <div class="panel">
+            <div class="panel-header">
+              <h3 class="panel-title">Products (<span id="product-count">0</span>)</h3>
+            </div>
+            <div class="panel-body" id="products-list">
+              <!-- Products injected dynamically -->
+              <p class="empty-state">Loading product portfolio...</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: Prospects & Cross-Product Intelligence -->
+      <section id="tab-prospects" class="tab-pane">
+        <div class="section-header">
+          <div>
+            <h2 class="section-title">Prospect Pipeline &amp; Cross-Product Fit Matrix</h2>
+            <p class="section-sub">Scraped prospects evaluated across all portfolio products using local all-MiniLM-L6-v2 embeddings and grounded buying signals.</p>
+          </div>
+        </div>
+
+        <!-- Scraper Bar -->
+        <div class="scraper-bar">
+          <input type="url" id="scrape-url" class="clean-input" placeholder="Enter public web URL to scrape into SQLite...">
+          <input type="text" id="scrape-company" class="clean-input input-narrow" placeholder="Company Name (Optional)">
+          <button id="btn-scrape" class="btn-primary">Scrape to SQLite</button>
+        </div>
+        <div id="scrape-alert" class="inline-alert hidden"></div>
+
+        <div class="split-layout">
+          <!-- Left: Prospects Table -->
+          <div class="table-container">
+            <table class="data-table" id="prospects-table">
+              <thead>
+                <tr>
+                  <th>Prospect Company</th>
+                  <th>Contact</th>
+                  <th>Priority</th>
+                  <th>Score</th>
+                  <th>Primary Product Fit</th>
+                  <th>Cross-Sell</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="prospects-tbody">
+                <tr><td colspan="7" class="loading-td">Loading prospects...</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Right: Prospect Detail & Pipeline Drawer -->
+          <div class="drawer-panel" id="prospect-drawer">
+            <div class="drawer-header">
+              <div>
+                <h3 class="drawer-title" id="drawer-prospect-name">Select a Prospect</h3>
+                <p class="drawer-sub" id="drawer-prospect-contact">Click "Inspect &amp; Pipeline" to evaluate.</p>
+              </div>
+              <button id="btn-run-full-pipeline" class="btn-primary" disabled>Run Full Pipeline</button>
+            </div>
+
+            <div class="drawer-actions">
+              <button class="btn-pipe" id="btn-pipe-research">1. Research</button>
+              <button class="btn-pipe" id="btn-pipe-fit">2. Fit Matrix</button>
+              <button class="btn-pipe" id="btn-pipe-signals">3. Buying Signals</button>
+              <button class="btn-pipe" id="btn-pipe-problem">4. Problem Statement</button>
+              <button class="btn-pipe" id="btn-pipe-score">5. Hybrid Score</button>
+              <button class="btn-pipe" id="btn-pipe-email">6. Outreach Email</button>
+            </div>
+
+            <div class="drawer-body">
+              <!-- Raw Text Preview -->
+              <details class="drawer-section" open>
+                <summary>Source Raw Text</summary>
+                <div class="quote-box" id="drawer-raw-text">No text selected.</div>
+              </details>
+
+              <!-- Research Summary -->
+              <div class="drawer-section">
+                <h4>Research Intelligence</h4>
+                <div id="drawer-research" class="card-box">No research generated yet.</div>
+              </div>
+
+              <!-- Product Fit Matrix -->
+              <div class="drawer-section">
+                <h4>Multi-Product Fit Matrix (Cosine Embeddings)</h4>
+                <div id="drawer-fit-matrix" class="card-box">Fit matrix not calculated yet.</div>
+              </div>
+
+              <!-- Buying Signals -->
+              <div class="drawer-section">
+                <h4>Buying Signals &amp; Evidence Grounding</h4>
+                <div id="drawer-signals" class="card-box">No signals classified yet.</div>
+              </div>
+
+              <!-- Problem Statement -->
+              <div class="drawer-section">
+                <h4>Tailored Problem Statement</h4>
+                <div id="drawer-problem" class="card-box">No problem statement generated yet.</div>
+              </div>
+
+              <!-- Hybrid Score -->
+              <div class="drawer-section">
+                <h4>Hybrid Score &amp; Qualification</h4>
+                <div id="drawer-score" class="card-box">Not scored yet.</div>
+              </div>
+
+              <!-- Outreach Email -->
+              <div class="drawer-section">
+                <div class="flex-between">
+                  <h4>Personalized Cold Outreach</h4>
+                  <span class="badge-draft">DRAFT ONLY — NO EXTERNAL SMTP</span>
+                </div>
+                <div id="drawer-email" class="card-box">No email drafted yet.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: Reply Classifier Sandbox -->
+      <section id="tab-replies" class="tab-pane">
+        <div class="section-header">
+          <div>
+            <h2 class="section-title">Prospect Reply Classifier Sandbox</h2>
+            <p class="section-sub">Test inbound triage against standard sales response intents (interested, objection, not_now, unsubscribe, out_of_office, referral).</p>
+          </div>
+        </div>
+
+        <div class="two-col-grid">
+          <div class="panel">
+            <div class="panel-header">
+              <h3 class="panel-title">Inbound Reply Input</h3>
+              <div class="flex-row">
+                <label for="sample-reply-select" class="chip-label">SAMPLE:</label>
+                <select id="sample-reply-select" class="clean-select">
+                  <option value="">-- Choose Seeded Sample Reply --</option>
+                </select>
+              </div>
+            </div>
+            <div class="panel-body">
+              <div class="form-group">
+                <label>Reply Email Body</label>
+                <textarea id="reply-input-text" class="clean-textarea" rows="8" placeholder="Paste or type an inbound prospect response here..."></textarea>
+              </div>
+              <button id="btn-classify-reply" class="btn-primary">Classify Reply Intent</button>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header">
+              <h3 class="panel-title">Classification Output</h3>
+            </div>
+            <div class="panel-body">
+              <div id="reply-output-card" class="reply-card-empty">
+                <p>Click "Classify Reply Intent" to evaluate.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 4: Telemetry & Queue -->
+      <section id="tab-telemetry" class="tab-pane">
+        <div class="section-header">
+          <div>
+            <h2 class="section-title">Inference Telemetry &amp; Task Queue</h2>
+            <p class="section-sub">Audit trail of all local Ollama calls and pending tasks stored in SQLite.</p>
+          </div>
+          <button id="btn-refresh-telemetry" class="btn-secondary btn-sm">Refresh Tables</button>
+        </div>
+
+        <div class="panel" style="margin-bottom: 24px;">
+          <div class="panel-header">
+            <h3 class="panel-title">Local Inference Logs (SQLite: inference_logs)</h3>
+          </div>
+          <div class="table-container">
+            <table class="data-table" id="logs-table">
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Workflow</th>
+                  <th>Endpoint</th>
+                  <th>Model</th>
+                  <th>Latency</th>
+                  <th>Eval Tokens</th>
+                  <th>Tokens/Sec</th>
+                  <th>Repaired</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="logs-tbody">
+                <tr><td colspan="9" class="loading-td">Loading inference logs...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <h3 class="panel-title">Durable Task Queue (SQLite: task_queue)</h3>
+          </div>
+          <div class="table-container">
+            <table class="data-table" id="queue-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Task Type</th>
+                  <th>Status</th>
+                  <th>Payload</th>
+                  <th>Error Message</th>
+                  <th>Created At</th>
+                  <th>Completed At</th>
+                </tr>
+              </thead>
+              <tbody id="queue-tbody">
+                <tr><td colspan="7" class="loading-td">Loading queue items...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script src="/static/local_agent.js"></script>
+</body>
+</html>
