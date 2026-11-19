@@ -320,7 +320,7 @@ async def test_handler_holds_sends_when_graph_is_down(graph, tmp_path):
     from tests.test_outbox_native import Cfg, StubBrain
 
     class E(Env):
-        instantly_api_key = ""
+        pass
 
     state = StateManager(os.path.join(tmp_path, "t.db"))
     await state.init_db()

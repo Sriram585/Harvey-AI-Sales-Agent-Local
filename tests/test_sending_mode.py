@@ -240,8 +240,6 @@ def test_the_outbox_says_which_mode_and_offers_the_way_out():
     assert "Approval mode" in approval and "waits here until you approve it" in approval
     auto = _render("sendingModeBanner", {**MODE, "mode": "autopilot", "held": 2})
     assert "Autopilot is on" in auto and "(2 now)" in auto and "Turn off autopilot" in auto
-    instantly = _render("sendingModeBanner", {**MODE, "provider": "instantly"})
-    assert "campaigns aren’t sent to Instantly" in instantly
 
 
 def test_settings_explains_both_and_asks_for_the_word():

@@ -177,15 +177,10 @@ async def decide_next_action(
     draft_campaigns = summary.get("draft_campaigns", 0) or 0
 
     # Drafts that can't deploy must not win the cycle: choosing send_campaign
-    # for them every cycle would starve the writer and scout forever. That's
-    # held Instantly drafts, any draft with the email channel off (the
-    # list-building setup), and native drafts while the kill switch is set
-    # (the Sender stages nothing until sending resumes).
+    # for them every cycle would starve the writer and scout forever.
     email = getattr(getattr(config, "channels", None), "email", None)
-    native_paused = (summary.get("sending_paused")
-                     and getattr(email, "provider", "") != "instantly")
-    held = (legacy_sending_held(config) or native_paused
-            or not getattr(email, "enabled", True))
+    native_paused = bool(summary.get("sending_paused"))
+    held = (native_paused or not getattr(email, "enabled", True))
     deployable = 0 if held else draft_campaigns
 
     if deployable > 0:

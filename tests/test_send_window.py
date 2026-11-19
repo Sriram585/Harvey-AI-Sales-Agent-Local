@@ -443,7 +443,7 @@ def test_which_configs_send_through_quiet_hours():
     assert sends_through_quiet_hours(cfg(send_window={}))
     assert not sends_through_quiet_hours(cfg())
     assert not sends_through_quiet_hours(cfg(send_window={"recipient_timezone": False}))
-    assert not sends_through_quiet_hours(cfg(send_window={}, provider="instantly"))
+    assert not sends_through_quiet_hours(cfg(send_window={}, provider="unknown"))
     assert not sends_through_quiet_hours(cfg(send_window={}, enabled=False))
 
 
@@ -641,7 +641,7 @@ def _patch_heartbeat_real_sender(monkeypatch, cfg, state, calls, stop, provider)
     monkeypatch.setattr(sender_mod, "Sender", real_sender)
     monkeypatch.setattr(sender_mod, "get_mail_provider", lambda c, e: provider)
     monkeypatch.setattr(sender_mod, "SEND_JITTER_SECONDS", (0, 0))
-    monkeypatch.setattr(main_mod, "load_env", lambda: SimpleNamespace(instantly_api_key=""))
+    monkeypatch.setattr(main_mod, "load_env", lambda: SimpleNamespace(linkedin_email=""))
     return main_mod
 
 

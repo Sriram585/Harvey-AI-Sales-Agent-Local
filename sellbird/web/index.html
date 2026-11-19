@@ -334,7 +334,7 @@
   <div class="subhead">Sending</div>
   <div id="sending-mode-card"></div>
 
-  <div class="subhead">Email provider <span class="hint">Active: <b id="active-provider">…</b> &middot; set <code>channels.email.provider</code> in <code>sellbird.yaml</code> to gmail, microsoft, smtp or instantly</span></div>
+  <div class="subhead">Email provider <span class="hint">Active: <b id="active-provider">…</b> &middot; set <code>channels.email.provider</code> in <code>sellbird.yaml</code> to gmail, microsoft, or smtp</span></div>
   <div class="card">
     <div class="settings-row">
       <div>
@@ -398,21 +398,6 @@
         <div class="form-group"><label class="form-label" for="m365-tenant">Directory (tenant) ID</label>
           <input type="text" class="form-input" id="m365-tenant" placeholder="00000000-0000-0000-0000-000000000000" autocomplete="off"></div>
         <button class="btn btn-primary btn-sm" onclick="saveMicrosoft()">Save Microsoft 365</button>
-      </div>
-    </div>
-
-    <div class="settings-row">
-      <div>
-        <h3>Instantly <span class="tag">Legacy</span></h3>
-        <p class="desc">Get your API key from <a href="https://app.instantly.ai/app/settings/integrations" target="_blank" rel="noopener">Instantly Settings → Integrations</a> (Growth plan or higher for API).</p>
-      </div>
-      <div class="fields">
-        <div class="form-group"><label class="form-label" for="instantly-key">API key</label>
-          <div class="with-btn"><input type="password" class="form-input" id="instantly-key" placeholder="Enter your Instantly API key" autocomplete="off">
-            <button class="btn btn-secondary" onclick="toggleVisibility('instantly-key')">Show</button>
-            <button class="btn btn-secondary" onclick="testInstantly()">Test</button></div>
-          <div id="instantly-test-result"></div></div>
-        <button class="btn btn-primary btn-sm" onclick="saveInstantly()">Save Instantly</button>
       </div>
     </div>
   </div>
@@ -509,17 +494,6 @@
     <h2>Getting your API keys</h2>
 
     <details>
-      <summary>Instantly API key (legacy)</summary>
-      <div class="faq-body">
-        <p>Instantly is the legacy sending option; Gmail or SMTP is recommended.</p>
-        <p>1. Sign up at <a href="https://instantly.ai" target="_blank" rel="noopener">instantly.ai</a> (you need the Growth plan for API access)</p>
-        <p>2. Go to Settings &gt; Integrations</p>
-        <p>3. Copy your API key</p>
-        <p>4. Paste it in the Settings tab here</p>
-      </div>
-    </details>
-
-    <details>
       <summary>LinkedIn credentials (optional)</summary>
       <div class="faq-body">
         <p>If you want Sellbird to find prospects on LinkedIn, enter your LinkedIn email and password. Sellbird uses a real browser to search LinkedIn like a human would, with random delays and rate limits to avoid detection.</p>
@@ -537,13 +511,6 @@
       <summary>"command not found: sellbird"</summary>
       <div class="faq-body">You need to activate the virtual environment first: <code>source .venv/bin/activate</code></div>
     </details>
-
-    <details>
-      <summary>Instantly API returns 401</summary>
-      <div class="faq-body">Your API key is wrong, or you need the Growth plan (the free plan doesn't include API access). Double-check the key in Settings &gt; Integrations in your Instantly dashboard.</div>
-    </details>
-
-
 
     <details>
       <summary>Sellbird isn't finding prospects</summary>

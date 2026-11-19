@@ -210,13 +210,13 @@ async def test_bad_addresses_are_refused(store, address, message):
             settings=SmtpSettings(host="h", username="u", password="p"))
 
 
-def test_instantly_installs_connect_no_inbox():
-    class Instantly(Config):
+def test_unknown_provider_connect_no_inbox():
+    class Unknown(Config):
         class channels:
             class email:
-                provider = "instantly"
-    with pytest.raises(ConnectRefused, match="Instantly"):
-        mailboxes.check_provider_allows_inboxes(Instantly)
+                provider = "custom"
+    with pytest.raises(ConnectRefused, match="custom"):
+        mailboxes.check_provider_allows_inboxes(Unknown)
 
 
 def test_a_future_warmup_start_is_refused():

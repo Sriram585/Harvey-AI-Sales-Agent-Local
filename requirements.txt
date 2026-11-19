@@ -13,6 +13,8 @@ keyring>=25,<26
 pystray>=0.19.5,<0.20; sys_platform == "darwin" or sys_platform == "win32"
 Pillow>=10,<12; sys_platform == "darwin" or sys_platform == "win32"
 pydantic>=2.5,<3
+psutil>=5.9.0,<8
+sentence-transformers>=2.2.0,<7
 pytz>=2024.1
 fastapi>=0.115,<1
 uvicorn>=0.34,<1

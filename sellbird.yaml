@@ -51,9 +51,9 @@ brain:
 channels:
   email:
     enabled: true
-    provider: "gmail"          # gmail (recommended) | microsoft | smtp | instantly
+    provider: "gmail"          # gmail (recommended) | microsoft | smtp
     max_daily_sends: 50
-    require_approval: true      # native: review in Outbox; Instantly: sending held
+    require_approval: true      # review in Outbox; false for autopilot
     # link_domains: ["mainsite.com"]   # your own sites besides the sending
     #                                  # domain and booking link; on autopilot,
     #                                  # an email linking elsewhere waits for you
@@ -66,7 +66,7 @@ channels:
     # New sending domain? Set start_date to the day your warmup went
     # on: no cold email for min_days, then the cold cap climbs from
     # start_sends by daily_increase a day up to max_daily_sends. Replies are
-    # never held. Gmail/Microsoft/SMTP only (Instantly has its own warmup).
+    # never held.
     # Check readiness any time with `sellbird warmup`.
     warmup:
       start_date: ""            # YYYY-MM-DD; blank = no ramp

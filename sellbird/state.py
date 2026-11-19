@@ -1134,8 +1134,7 @@ class StateManager:
     async def get_texts_for_prospect(self, prospect_id: str, limit: int = 50) -> list[str]:
         """Everything Sellbird wrote for this person, which a reply may quote
         back: their Outbox emails (a sent one with its footer, whatever it
-        said then) and the templates of campaigns they're in (Instantly and
-        hand sends never pass through the Outbox; merge tags unfilled)."""
+        said then) and the templates of campaigns they're in."""
         texts: list[str] = []
         async with self._connect() as db:
             async with db.execute(

@@ -273,7 +273,7 @@ async def test_a_conversation_handed_back_to_sellbird_is_answered_again(tmp_path
 
 
 @pytest.mark.asyncio
-async def test_an_auto_reply_hand_off_keeps_instantly_replies_being_read(state):
+async def test_an_auto_reply_hand_off_keeps_replies_being_read(state):
     from sellbird.models.conversation import Conversation
     await state.add_conversation(Conversation(
         id="", prospect_id="p", campaign_id="", channel="email", intent="ooo", status="needs_human"))
@@ -281,14 +281,14 @@ async def test_an_auto_reply_hand_off_keeps_instantly_replies_being_read(state):
     assert summary["open_conversations"] == 0 and summary["auto_reply_handoffs"] == 1
 
 
-def _instantly_with_a_draft_and_an_open_conversation(monkeypatch, state, calls, stop, read_ok):
+def _with_a_draft_and_an_open_conversation(monkeypatch, state, calls, stop, read_ok):
     from tests.test_send_window import BASE, _patch_heartbeat
     from sellbird.agents import handler as handler_mod, sender as sender_mod
     from sellbird.config import SellbirdConfig
-    cfg = SellbirdConfig(**BASE, channels={"email": {"provider": "instantly", "require_approval": False}})
+    cfg = SellbirdConfig(**BASE, channels={"email": {"provider": "gmail", "require_approval": False}})
     main_mod = _patch_heartbeat(monkeypatch, cfg, state, calls, stop)
     monkeypatch.setattr(main_mod, "in_quiet_hours", lambda c: False)
-    monkeypatch.setattr(sender_mod.Sender, "is_native", False)
+    monkeypatch.setattr(sender_mod.Sender, "is_native", True)
 
     async def read(self):
         calls.append("replies")
@@ -309,7 +309,7 @@ async def test_replies_are_read_before_a_campaign_deploys_with_a_conversation_op
     import asyncio
     await _draft_and_open_conversation(state)
     calls, stop = [], asyncio.Event()
-    main_mod = _instantly_with_a_draft_and_an_open_conversation(monkeypatch, state, calls, stop, True)
+    main_mod = _with_a_draft_and_an_open_conversation(monkeypatch, state, calls, stop, True)
     await asyncio.wait_for(main_mod.heartbeat(stop), timeout=30)
     assert calls == ["replies", "send"]
 
@@ -319,6 +319,6 @@ async def test_a_campaign_waits_when_replies_could_not_be_read(state, monkeypatc
     import asyncio
     await _draft_and_open_conversation(state)
     calls, stop = [], asyncio.Event()
-    main_mod = _instantly_with_a_draft_and_an_open_conversation(monkeypatch, state, calls, stop, False)
+    main_mod = _with_a_draft_and_an_open_conversation(monkeypatch, state, calls, stop, False)
     await asyncio.wait_for(main_mod.heartbeat(stop), timeout=30)
     assert calls == ["replies"]

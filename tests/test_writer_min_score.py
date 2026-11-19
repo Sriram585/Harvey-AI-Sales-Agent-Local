@@ -17,7 +17,7 @@ from tests.test_writer_retry import GOOD, FakeBrain, state, status  # noqa: F401
 
 
 def config(min_write_score=None):
-    email = {"provider": "instantly", "require_approval": False}
+    email = {"provider": "gmail", "require_approval": False}
     if min_write_score is not None:
         email["min_write_score"] = min_write_score
     return SimpleNamespace(

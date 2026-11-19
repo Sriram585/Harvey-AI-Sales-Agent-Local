@@ -27,7 +27,7 @@ def config(require_tip=None, site_facts=None):
     if site_facts is not None:
         writer["site_facts"] = site_facts
     return SimpleNamespace(
-        channels=SimpleNamespace(email=SimpleNamespace(provider="instantly", require_approval=False)),
+        channels=SimpleNamespace(email=SimpleNamespace(provider="gmail", require_approval=False)),
         product=SimpleNamespace(name="P", description="D", key_benefits=[], pricing=""),
         persona=SimpleNamespace(name="S", company="C", role="R", tone="t"),
         writer=SimpleNamespace(humanizer=False, email_rules="", **writer),

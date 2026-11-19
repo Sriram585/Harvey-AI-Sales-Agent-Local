@@ -162,13 +162,13 @@ def test_offer_override():
 def test_load_env_reads_environment(monkeypatch):
     # Don't read a developer's real .env — its keys would leak into the test.
     monkeypatch.setattr("sellbird.config.load_dotenv", lambda *a, **k: False)
-    monkeypatch.setenv("INSTANTLY_API_KEY", "key-123")
+    monkeypatch.setenv("LINKEDIN_EMAIL", "test@example.com")
     monkeypatch.setenv("GMAIL_CLIENT_ID", "client-456")
     env = load_env()
-    assert env.instantly_api_key == "key-123"
+    assert env.linkedin_email == "test@example.com"
     assert env.gmail_client_id == "client-456"
 
 
 def test_env_config_rejects_non_string():
     with pytest.raises(ValidationError):
-        EnvConfig(instantly_api_key=["not", "a", "string"])
+        EnvConfig(linkedin_email=["not", "a", "string"])

@@ -1,7 +1,7 @@
 """Brain — Local Sales Agent thinking engine.
 
 All external AI APIs and external CLIs have been stripped.
-Local execution routes through an optional local transport or local model engine.
+Local execution routes strictly through local Ollama or an optional local transport.
 Zero external AI calls are permitted.
 """
 
@@ -9,12 +9,23 @@ import asyncio
 import json
 import logging
 import re
+import time
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from sellbird.paths import PROJECT_ROOT
 from sellbird.state import StateManager
 from sellbird.textio import read_user_text
 from sellbird.workspace_home import current_home
+from sellbird.local_ai.ollama_client import (
+    DEFAULT_KEEP_ALIVE,
+    DEFAULT_OLLAMA_URL,
+    OllamaClient,
+    OllamaUnavailableError,
+    _strip_markdown_fences,
+)
+from sellbird.local_ai.hardware import get_hardware_profile
 
 logger = logging.getLogger("sellbird.brain")
 
@@ -24,7 +35,7 @@ SKILLS_DIR = PROJECT_ROOT / "skills"
 DEFAULT_TIMEOUT_SECONDS = 300
 DEFAULT_MAX_RETRIES = 2
 
-PROVIDER_LABELS = {"local": "Local"}
+PROVIDER_LABELS = {"local": "Local Ollama"}
 BRAIN_STATUS_KEY = "brain_status"
 
 
@@ -65,14 +76,25 @@ class Brain:
         self.transport = transport
         self.config = brain_config
         self.provider = "local"
-        self.model = "local-llm"
+        
+        # Resolve model name: config override > hardware profile recommendation > default
+        if brain_config and getattr(brain_config, "model", None) and brain_config.model not in ("local", "local-llm", ""):
+            self.model = brain_config.model
+        else:
+            try:
+                profile = get_hardware_profile()
+                self.model = profile.recommended_model
+            except Exception:
+                self.model = "qwen3:4b"
+
+        self.ollama = OllamaClient()
         self.last_reply_empty = False
         self.unavailable = ""
         self.quota = None
 
     @property
     def provider_label(self) -> str:
-        return PROVIDER_LABELS.get(self.provider, "Local")
+        return PROVIDER_LABELS.get(self.provider, "Local Ollama")
 
     @property
     def paused_reason(self) -> str:
@@ -83,8 +105,16 @@ class Brain:
         return self.unavailable
 
     async def preflight(self) -> str:
-        """Preflight verification. Returns empty string if ready."""
-        return ""
+        """Preflight verification. Returns empty string if ready, or error description."""
+        try:
+            models = await self.ollama.health_check()
+            if not models:
+                return f"Ollama is running at {self.ollama.base_url}, but no models are loaded. Run 'ollama pull {self.model}'."
+            return ""
+        except OllamaUnavailableError as e:
+            return str(e)
+        except Exception as e:
+            return f"Ollama preflight failed: {e}"
 
     async def think(
         self,
@@ -96,7 +126,7 @@ class Brain:
         label: str = "",
         timeout: float = DEFAULT_TIMEOUT_SECONDS,
     ) -> str:
-        """Execute a thought turn. External AI is disabled; uses transport if configured."""
+        """Execute an inference call against local Ollama or optional transport."""
         self.last_reply_empty = False
 
         if self.transport is not None:
@@ -108,9 +138,88 @@ class Brain:
                 task=task,
             )
 
-        logger.info(f"External AI disabled. Local brain invoked for {agent}/{task} without active local transport.")
-        self.last_reply_empty = True
-        return ""
+        # Native Ollama call
+        import httpx
+        endpoint = f"{self.ollama.base_url}/api/chat"
+        system_prompt = (
+            f"You are Harvey/Sellbird, an autonomous local AI sales and outreach agent. "
+            f"Executing as agent '{agent}' on task '{task}'."
+        )
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": prompt},
+        ]
+
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "messages": messages,
+            "stream": False,
+            "keep_alive": self.ollama.keep_alive,
+            "options": {
+                "keep_alive": self.ollama.keep_alive,
+            },
+        }
+        if expect_json:
+            payload["format"] = "json"
+
+        t0 = time.perf_counter()
+        raw_text = ""
+        eval_count = 0
+        eval_duration = 0
+        status = "pending"
+
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                resp = await client.post(endpoint, json=payload)
+                if resp.status_code != 200:
+                    status = f"http_{resp.status_code}"
+                    logger.warning(f"Ollama returned HTTP {resp.status_code}: {resp.text}")
+                    self.last_reply_empty = True
+                    return ""
+
+                data = resp.json()
+                raw_text = data.get("message", {}).get("content", "")
+                eval_count = data.get("eval_count", 0)
+                eval_duration = data.get("eval_duration", 0)
+                status = "success"
+
+                if expect_json:
+                    return _strip_markdown_fences(raw_text)
+                return raw_text.strip()
+
+        except (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPError) as e:
+            status = "connection_error"
+            self.unavailable = f"Local Ollama unreachable: {e}"
+            logger.warning(f"Brain: {self.unavailable}")
+            self.last_reply_empty = True
+            return ""
+        except Exception as e:
+            status = "error"
+            logger.error(f"Brain think unexpected error ({agent}/{task}): {e}")
+            self.last_reply_empty = True
+            return ""
+        finally:
+            latency_ms = round((time.perf_counter() - t0) * 1000, 2)
+            if eval_duration > 0:
+                tokens_per_sec = round(eval_count / (eval_duration / 1e9), 2)
+            elif latency_ms > 0 and eval_count > 0:
+                tokens_per_sec = round(eval_count / (latency_ms / 1000), 2)
+            else:
+                tokens_per_sec = 0.0
+
+            record = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "workflow_name": f"{agent}.{task}",
+                "endpoint_url": endpoint,
+                "model_name": self.model,
+                "latency_ms": latency_ms,
+                "eval_count": eval_count,
+                "tokens_per_sec": tokens_per_sec,
+                "json_repaired": False,
+                "status": status,
+            }
+            await self.ollama._log_inference(record)
 
     async def _think_transport(
         self, prompt: str, *, expect_json: bool, timeout: float, agent: str, task: str
@@ -156,7 +265,7 @@ class Brain:
             self.last_reply_empty = True
             return {}
 
-        text = raw.strip()
+        text = _strip_markdown_fences(raw)
         if "```" in text:
             match = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
             if match:

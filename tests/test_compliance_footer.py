@@ -115,24 +115,6 @@ def test_the_gate_refuses_cold_email_missing_its_configured_address():
                           kind="reply", postal_address=ADDRESS)
 
 
-@pytest.mark.asyncio
-async def test_instantly_sequences_carry_the_footer(state):
-    config = SimpleNamespace(
-        channels=SimpleNamespace(email=SimpleNamespace(
-            enabled=True, provider="instantly", require_approval=False,
-            max_daily_sends=50, send_to_risky=False)),
-        compliance=ComplianceConfig(postal_address=ADDRESS),
-    )
-    sender = Sender(None, state, config, EnvConfig())
-    sender.instantly = AsyncMock()
-    sender.instantly.set_campaign_emails.return_value = None  # stop after the upload
-    campaign = Campaign(id="c", name="Draft", instantly_campaign_id="existing",
-                        sequence=[EmailStep(step=1, subject="a note", body="Would this help?")])
-    await sender._deploy_campaign(campaign)
-    uploaded = sender.instantly.set_campaign_emails.await_args.args[1]
-    assert uploaded[0]["body"] == "Would this help?\n\n" + ADDRESS + "\n" + LINE
-
-
 def test_the_notice_asks_for_an_address_only_when_email_is_on():
     def cfg(address, enabled=True):
         return SimpleNamespace(
@@ -530,26 +512,6 @@ async def test_a_reply_quoting_the_previous_default_footer_is_not_an_opt_out(sta
 
 
 # ── Review round 3 ──
-
-@pytest.mark.asyncio
-async def test_every_footer_sellbird_used_stays_ours_after_the_line_changes(state):
-    # Instantly keeps the footer in its own copy; Sellbird remembers what it used.
-    old = 'Reply "unsubscribe" to stop hearing from me.'
-    config = SimpleNamespace(
-        channels=SimpleNamespace(email=SimpleNamespace(
-            enabled=True, provider="instantly", require_approval=False,
-            max_daily_sends=50, send_to_risky=False)),
-        compliance=ComplianceConfig(postal_address=ADDRESS, opt_out_line=old))
-    sender = Sender(None, state, config, EnvConfig())
-    sender.instantly = AsyncMock()
-    sender.instantly.set_campaign_emails.return_value = None
-    await sender._deploy_campaign(Campaign(
-        id="c", name="Draft", instantly_campaign_id="existing",
-        sequence=[EmailStep(step=1, subject="a note", body="Would this help?")]))
-    # The line is changed afterwards; a reply quotes the old one.
-    status, _ = await _reply(state, "Yes let's talk.\n\nOn Tue Sellbird wrote:\n> Would this help?\n> " + old)
-    assert status != "opted_out"
-
 
 @pytest.mark.asyncio
 async def test_template_lines_with_merge_tags_are_recognised_when_quoted(state):

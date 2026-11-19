@@ -268,9 +268,8 @@ async def get_setup_status():
         provider_done = _has("SMTP_HOST", "SMTP_USERNAME", "SMTP_PASSWORD")
         provider_help = "Enter your SMTP host, username, and password in Settings."
     else:
-        instantly_key = env_vars.get("INSTANTLY_API_KEY", "") or os.getenv("INSTANTLY_API_KEY", "")
-        provider_done = bool(instantly_key) and instantly_key != "your_instantly_api_key_here"
-        provider_help = "Enter your Instantly API key in Settings."
+        provider_done = False
+        provider_help = "Email provider is not configured. Set provider to gmail, microsoft, or smtp in sellbird.yaml."
     checks.append({
         "id": "email_provider", "label": f"Email provider configured ({provider})",
         "done": provider_done,
@@ -343,9 +342,9 @@ def _current_provider() -> str:
     """Read channels.email.provider from the active config (best-effort)."""
     try:
         cfg = yaml.safe_load(read_user_text(_resolve_config_file())) or {}
-        return ((cfg.get("channels") or {}).get("email") or {}).get("provider", "instantly")
+        return ((cfg.get("channels") or {}).get("email") or {}).get("provider", "gmail")
     except Exception:
-        return "instantly"
+        return "gmail"
 
 
 @app.get("/api/settings")
@@ -353,7 +352,7 @@ async def get_settings():
     """Get current settings — presence flags only for secrets, never raw values."""
     env_vars = _read_env_file()
     all_keys = [
-        "INSTANTLY_API_KEY", "LINKEDIN_EMAIL", "LINKEDIN_PASSWORD",
+        "LINKEDIN_EMAIL", "LINKEDIN_PASSWORD",
         "GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET",
         "SMTP_HOST", "SMTP_PORT", "SMTP_USERNAME", "SMTP_PASSWORD",
         "IMAP_HOST", "IMAP_PORT", "IMAP_USERNAME", "IMAP_PASSWORD",
@@ -373,7 +372,6 @@ async def get_settings():
         "provider": _current_provider(),
         # Non-secret values echo back so fields repopulate; secrets are
         # presence-only so keys never leave the box.
-        "instantly_api_key_set": is_set("INSTANTLY_API_KEY"),
         "linkedin_email": env_vars.get("LINKEDIN_EMAIL", ""),
         "linkedin_password_set": is_set("LINKEDIN_PASSWORD"),
 
@@ -408,7 +406,7 @@ async def save_env_settings(request: Request):
         return JSONResponse({"success": False, "message": "Invalid request body."}, status_code=400)
     async with _env_lock:
         updates = {}
-        for key in ["INSTANTLY_API_KEY", "LINKEDIN_EMAIL", "LINKEDIN_PASSWORD",
+        for key in ["LINKEDIN_EMAIL", "LINKEDIN_PASSWORD",
                      "GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET",
                      "SMTP_HOST", "SMTP_PORT", "SMTP_USERNAME", "SMTP_PASSWORD",
                      "IMAP_HOST", "IMAP_PORT", "IMAP_USERNAME", "IMAP_PASSWORD",
@@ -440,31 +438,6 @@ async def save_env_settings(request: Request):
                 if key in updates:
                     os.environ[key] = updates[key]
     return {"success": True}
-
-
-@app.post("/api/settings/test-instantly")
-async def test_instantly(request: Request):
-    """Test an Instantly API key."""
-    try:
-        data = await request.json()
-    except Exception:
-        data = {}
-    api_key = str(data.get("api_key", "") or "")
-    if not api_key:
-        return {"success": False, "message": "No API key provided."}
-    try:
-        import httpx
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(
-                "https://api.instantly.ai/api/v2/accounts",
-                headers={"Authorization": f"Bearer {api_key}"},
-            )
-            if resp.status_code == 200:
-                return {"success": True, "message": "Connected to Instantly."}
-            else:
-                return {"success": False, "message": f"API returned {resp.status_code}. Check your key."}
-    except Exception as e:
-        return {"success": False, "message": f"Connection failed: {str(e)}"}
 
 
 # ── Companies ──
@@ -1183,7 +1156,7 @@ HAND_SENDABLE_EMAIL = ("verified", "risky")
 
 
 def _sellbird_can_send() -> bool:
-    """Can Sellbird send email itself (a connected mailbox, or Instantly)?
+    """Can Sellbird send email itself (a connected mailbox)?
 
     Sending by hand from the dashboard is only offered when it can't: with
     two senders, any timing gap between them emails someone twice. If the
@@ -1200,7 +1173,7 @@ def _sellbird_can_send() -> bool:
         if (email.provider or "").strip().lower() in NATIVE_PROVIDERS:
             provider = get_mail_provider(config, env)
             return bool(provider and provider.is_configured()) or _extra_inboxes_connected()
-        return bool(env.instantly_api_key)
+        return False
     except Exception:
         return True
 
@@ -1241,7 +1214,7 @@ def _compliance_view() -> dict:
 
 
 async def _sellbird_committed_ids() -> set[str]:
-    """Everyone Sellbird has approved or sent mail for (Outbox or Instantly).
+    """Everyone Sellbird has approved or sent mail for (Outbox).
 
     Approved mail can be going out at this moment, so these people are past
     the point where a hand send can be recorded safely. So is anyone whose
@@ -1249,19 +1222,10 @@ async def _sellbird_committed_ids() -> set[str]:
     awaits review isn't: marking the person sent cancels it.
     """
     from sellbird.state import MAYBE_SENT_PREFIX
-    ids = {r["prospect_id"] for r in await query_db(
+    return {r["prospect_id"] for r in await query_db(
         "SELECT DISTINCT prospect_id FROM outbox WHERE status IN ('approved', 'sending', 'sent') "
         "OR (status = 'failed' AND substr(error, 1, ?) = ?)",
         (len(MAYBE_SENT_PREFIX), MAYBE_SENT_PREFIX))}
-    for row in await query_db(
-            "SELECT prospect_ids_json FROM campaigns WHERE COALESCE(instantly_campaign_id, '') != ''"):
-        try:
-            found = json.loads(row.get("prospect_ids_json") or "[]")
-        except (json.JSONDecodeError, TypeError):
-            continue
-        if isinstance(found, list):
-            ids.update(i for i in found if isinstance(i, str))
-    return ids
 
 
 async def _hand_sent_ids() -> set[str]:
@@ -1271,24 +1235,15 @@ async def _hand_sent_ids() -> set[str]:
 
 
 async def _sellbird_sent_to(prospect_id: str) -> bool:
-    """Did Sellbird itself email this person (native send, or an Instantly campaign)?
+    """Did Sellbird itself email this person (native send)?
 
     A send in flight, or cut off mid-way, counts: it may have reached them.
     """
     from sellbird.state import MAYBE_SENT_PREFIX
-    if await query_db(
-            "SELECT 1 FROM outbox WHERE prospect_id = ? AND (status IN ('sending', 'sent') "
-            "OR (status = 'failed' AND substr(error, 1, ?) = ?)) LIMIT 1",
-            (prospect_id, len(MAYBE_SENT_PREFIX), MAYBE_SENT_PREFIX)):
-        return True
-    for row in await query_db(
-            "SELECT prospect_ids_json FROM campaigns WHERE COALESCE(instantly_campaign_id, '') != ''"):
-        try:
-            if prospect_id in json.loads(row.get("prospect_ids_json") or "[]"):
-                return True
-        except (json.JSONDecodeError, TypeError):
-            continue
-    return False
+    return bool(await query_db(
+        "SELECT 1 FROM outbox WHERE prospect_id = ? AND (status IN ('sending', 'sent') "
+        "OR (status = 'failed' AND substr(error, 1, ?) = ?)) LIMIT 1",
+        (prospect_id, len(MAYBE_SENT_PREFIX), MAYBE_SENT_PREFIX)))
 
 
 def _refuse(message: str, code: int = 409):

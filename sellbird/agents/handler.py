@@ -1,6 +1,6 @@
 """Handler — monitors replies and manages conversations.
 
-Works against Instantly (legacy) or a native mail provider (Gmail/SMTP).
+Works against a native mail provider (Gmail/SMTP/Microsoft).
 The native path also owns bounce handling: a bounce marks the address
 invalid, cancels the prospect's queued sends, and — past a bounce-rate
 threshold — flips the global kill switch so a bad list can't torch the
@@ -23,7 +23,6 @@ from sellbird.config import (
 from sellbird.gate import autopilot_review, do_not_contact_match, pre_send_check
 from sellbird.email_style import style_problems, tidy
 from sellbird.humanize import humanize, humanizer_enabled
-from sellbird.integrations.instantly import InstantlyClient
 from sellbird.integrations.mail_provider import (
     NATIVE_PROVIDERS, get_mail_provider, strip_quoted_reply,
 )
@@ -643,7 +642,6 @@ class Handler:
         self.state = state
         self.config = config
         self.env = env
-        self.instantly = InstantlyClient(env.instantly_api_key)
         self.provider = get_mail_provider(config, env)
         # For extra inboxes' sign-ins (sellbird.mailboxes); None = the keychain.
         self.secrets = None
@@ -676,48 +674,11 @@ class Handler:
         if self.is_native:
             return await self._run_native()
 
-        # 1. Fetch active campaigns
-        active_campaigns = await self.state.get_campaigns_by_status("active")
-        if not active_campaigns:
-            logger.info("Handler: No active campaigns to monitor.")
-            return True
-
-        total_handled = 0
-        complete = True
-
-        for campaign in active_campaigns:
-            if not campaign.instantly_campaign_id:
-                continue
-
-            # 2. Get replies from Instantly
-            try:
-                replies = await self.instantly.get_replies(campaign.instantly_campaign_id)
-            except Exception as e:
-                logger.error(f"Handler: Failed to fetch replies for {campaign.name}: {e}")
-                complete = False
-                continue
-            if not replies:
-                continue
-
-            for reply in replies:
-                if not isinstance(reply, dict):
-                    continue
-                try:
-                    handled = await self._handle_reply(reply, campaign)
-                    if handled:
-                        total_handled += 1
-                except BrainUnavailable as e:
-                    logger.error(f"Handler: stopping; replies are left for later ({e}).")
-                    return False
-                except Exception as e:
-                    logger.error(f"Handler: Error processing reply: {e}")
-                    complete = False
-
-        if total_handled:
-            logger.info(f"Handler: Processed {total_handled} replies.")
-        else:
-            logger.info("Handler: No new replies.")
-        return complete
+        logger.error(
+            f"Handler: Configured email provider '{self.config.channels.email.provider}' "
+            f"is not supported. Supported providers: {NATIVE_PROVIDERS}"
+        )
+        return False
 
     async def _handle_reply(self, reply: dict, campaign) -> bool:
         """Process a single reply. Returns True if a new reply was handled."""
@@ -924,10 +885,8 @@ class Handler:
         old_stage = convo.stage
         convo.stage = self._determine_stage(intent, convo.stage, reply_text)
 
-        # 2b. Draft the reply now, while nothing is stored yet. A held
-        # Instantly setup can't send it, so don't spend a model call on it.
+        # 2b. Draft the reply now, while nothing is stored yet.
         await sync_sending_mode(self.config, self.state)
-        held = not self.is_native and legacy_sending_held(self.config)
         # Nothing can be sent to someone on the do-not-contact list, so don't
         # spend a model call drafting; they go to you instead (step 3).
         listed = do_not_contact_match(prospect.email or lead_email,
@@ -938,7 +897,7 @@ class Handler:
         if intent == "accepted_offer" and not listed and not handed_off:
             handoff = await self._hand_off_once(prospect, reply_text)
         response = ""
-        if intent in AUTO_REPLY_INTENTS and not held and not listed and not handed_off:
+        if intent in AUTO_REPLY_INTENTS and not listed and not handed_off:
             response = await self._generate_response(intent, reply_text, prospect, convo,
                                                      handoff=handoff)
 
@@ -1055,20 +1014,6 @@ class Handler:
             logger.warning(f"Handler: No auto-reply policy for intent '{intent}'. Skipping reply.")
             return
 
-        if held:
-            # Instantly has no approval queue: a human answers this one.
-            await self.state.update_conversation(convo.id, status="needs_human")
-            await self.state.log_action(
-                action_type="escalation", agent="handler",
-                details={"prospect_email": lead_email, "reason": "instantly_approval_required",
-                         "reply_preview": reply_text[:200]},
-            )
-            logger.warning(
-                f"Handler: reply from {lead_email} held for a human: Instantly can't "
-                "queue replies for approval while require_approval is true."
-            )
-            return
-
         # For interested, objection, question, wrong_person — the reply drafted above
         if not response:
             # No usable draft from a working provider: hand it to a human
@@ -1086,57 +1031,16 @@ class Handler:
             )
             return
 
-        # Send the response — natively through the outbox approval ladder,
-        # or immediately via Instantly (legacy).
+        # Send the response — natively through the outbox approval ladder.
         if self.is_native:
             await self._queue_native_reply(
                 response, prospect, convo, reply_meta or {}, intent
             )
-        elif await self.state.get_setting(REVIEW_NEXT_REPLY_KEY + prospect.id):
-            # You undid their opt-out, and Instantly can't hold a reply for
-            # approval: the first answer after an undo is yours to send.
-            await self.state.update_conversation(convo.id, status="needs_human")
-            await self.state.delete_setting(REVIEW_NEXT_REPLY_KEY + prospect.id)
-            await self.state.log_action(
-                action_type="escalation",
-                agent="handler",
-                details={"prospect_email": lead_email,
-                         "reason": "first reply since you undid their opt-out",
-                         "reply_preview": reply_text[:200]},
+        else:
+            logger.error(
+                f"Handler: Cannot send reply — email provider '{self.config.channels.email.provider}' "
+                "is not supported."
             )
-            logger.info(f"Handler: {lead_email} wrote after their opt-out was undone. Handed to you.")
-        elif held_reasons := self._instantly_reply_held(prospect, response):
-            # Instantly sends at once, with no Outbox to hold it in: an answer
-            # the gate or the autopilot review stops goes to you instead.
-            await self.state.update_conversation(convo.id, status="needs_human")
-            await self.state.log_action(
-                action_type="escalation",
-                agent="handler",
-                details={"prospect_email": lead_email,
-                         "reason": "Sellbird's answer was held: " + "; ".join(held_reasons)[:200],
-                         "reply_preview": reply_text[:200]},
-            )
-            logger.warning(f"Handler: answer to {lead_email} held ({held_reasons}). Handed to you.")
-        elif reply_uuid:
-            result = await self.instantly.send_reply(reply_uuid, response)
-            if result is not None:
-                # Add our response to conversation
-                convo.thread.append(Message(sender="sellbird", content=response))
-                await self.state.update_conversation(
-                    convo.id,
-                    thread_json=convo.thread_json(),
-                )
-                logger.info(f"Handler: Replied to {lead_email}")
-
-                await self.state.log_action(
-                    action_type="reply",
-                    agent="handler",
-                    details={
-                        "prospect_email": lead_email,
-                        "intent": intent,
-                        "response_preview": response[:100],
-                    },
-                )
 
     # ── Native provider path (Gmail / SMTP) ──
 
@@ -1315,13 +1219,6 @@ class Handler:
                 details={"prospect_email": prospect.email, "intent": intent,
                          "response_preview": response[:100]},
             )
-
-    def _instantly_reply_held(self, prospect, response: str) -> list[str]:
-        """Why an Instantly reply must not go out by itself, or []."""
-        gate = pre_send_check(prospect.email, "Re:", response, kind="reply",
-                              do_not_contact=live_do_not_contact(self.config))
-        return list(gate.reasons) + autopilot_review("", response, self.config,
-                                                     recipient=prospect.email)
 
     async def _classify_intent(self, reply_text: str, prospect) -> str:
         """Ask the brain to classify the reply's intent."""

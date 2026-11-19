@@ -97,7 +97,7 @@ class _Cfg:
     class channels:
         class email:
             enabled = True
-            provider = "instantly"
+            provider = "gmail"
             max_daily_sends = 50
             send_to_risky = False
 
@@ -117,7 +117,7 @@ async def test_sender_only_sends_verified(state, monkeypatch):
         ids[status] = await state.add_prospect(p)
 
     class Env:
-        instantly_api_key = "k"
+        pass
     sender = Sender(brain=None, state=state, config=_Cfg(), env=Env())
 
     # Filter logic mirrors _deploy_campaign's lead selection.

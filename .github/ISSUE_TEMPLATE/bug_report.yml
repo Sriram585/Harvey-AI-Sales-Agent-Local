@@ -40,7 +40,7 @@ body:
     id: mail
     attributes:
       label: Mail provider
-      options: [Gmail / Google Workspace, Microsoft 365, SMTP, Instantly]
+      options: [Gmail / Google Workspace, Microsoft 365, SMTP]
   - type: input
     id: os
     attributes:

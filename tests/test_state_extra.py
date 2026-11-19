@@ -175,10 +175,10 @@ async def test_campaign_add_and_fetch_by_status(state):
 @pytest.mark.asyncio
 async def test_update_campaign_fields(state):
     cid = await state.add_campaign(Campaign(id="", name="Test"))
-    await state.update_campaign(cid, status="active", instantly_campaign_id="inst-9")
+    await state.update_campaign(cid, status="active", name="New Name")
     active = await state.get_campaigns_by_status("active")
     assert len(active) == 1
-    assert active[0].instantly_campaign_id == "inst-9"
+    assert active[0].name == "New Name"
 
 
 # ── Conversations ──

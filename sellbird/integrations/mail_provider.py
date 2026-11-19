@@ -1,7 +1,7 @@
-"""Mail provider abstraction — Sellbird owns its sending, Instantly optional.
+"""Mail provider abstraction — Sellbird owns its sending.
 
 A MailProvider gives Sellbird full inbox control: send, read replies,
-thread. Two native providers ship:
+thread. Three native providers ship:
 
 - ``gmail``  — a Google Workspace / Gmail mailbox via the Gmail REST API
   (recommended: a real mailbox on a dedicated secondary domain is the
@@ -10,9 +10,6 @@ thread. Two native providers ship:
   (OAuth; Exchange Online no longer accepts passwords over IMAP).
 - ``smtp``   — any mailbox that speaks SMTP + IMAP (AgentMail, Fastmail,
   a Workspace app-mailbox, self-hosted). Configuration via .env.
-
-``instantly`` remains supported through the legacy Sender/Handler path —
-it isn't a MailProvider because Instantly owns sequencing/sending itself.
 """
 
 import logging
@@ -222,7 +219,7 @@ class MailProvider(ABC):
 
 
 def get_mail_provider(config, env) -> MailProvider | None:
-    """Build the configured native provider, or None for instantly/unknown."""
+    """Build the configured native provider, or None for unknown."""
     provider = (config.channels.email.provider or "").strip().lower()
     if provider == "gmail":
         from sellbird.integrations.gmail import GmailProvider

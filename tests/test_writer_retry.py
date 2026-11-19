@@ -40,7 +40,7 @@ class FakeBrain:
 
 
 CONFIG = SimpleNamespace(
-    channels=SimpleNamespace(email=SimpleNamespace(provider="instantly", require_approval=False)),
+    channels=SimpleNamespace(email=SimpleNamespace(provider="gmail", require_approval=False)),
     product=SimpleNamespace(name="P", description="D", key_benefits=[], pricing=""),
     persona=SimpleNamespace(name="S", company="C", role="R", tone="t"),
 )

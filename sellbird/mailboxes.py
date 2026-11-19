@@ -410,10 +410,9 @@ def check_provider_allows_inboxes(config) -> None:
     provider = (getattr(config.channels.email, "provider", "") or "").strip().lower()
     if provider in NATIVE_PROVIDERS:
         return
-    name = "Instantly" if provider == "instantly" else (provider or "not set")
+    name = provider or "not set"
     raise ConnectRefused(
-        f"Your sending provider is {name}. Instantly installs send through Instantly "
-        "only. Set channels.email.provider to gmail, microsoft or smtp before "
+        f"Your sending provider is {name}. Set channels.email.provider to gmail, microsoft or smtp before "
         "connecting inboxes.")
 
 

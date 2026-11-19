@@ -27,7 +27,7 @@ LEARNED = {
         "titles": ["Owner"], "geography": ["United States"],
     },
     "channels": {
-        "email": {"enabled": True, "provider": "instantly", "max_daily_sends": 50},
+        "email": {"enabled": True, "provider": "gmail", "max_daily_sends": 50},
         "linkedin": {"enabled": True, "max_daily_connections": 20, "max_daily_messages": 10},
     },
     "usage": {

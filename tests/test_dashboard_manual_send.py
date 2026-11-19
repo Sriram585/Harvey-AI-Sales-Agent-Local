@@ -157,14 +157,6 @@ def test_unticking_someone_sellbird_emailed_is_refused(client, env):
     assert _status(env, "prospects", "p1") == "contacted"
 
 
-def test_unticking_someone_sent_through_instantly_is_refused(client, env):
-    _prospect(env, "p1", "a@acme.test", status="contacted")
-    _campaign(env, "c1", ["p1"])
-    _sql(env, "UPDATE campaigns SET instantly_campaign_id = 'inst-1', status = 'active'")
-    assert client.post("/api/prospects/p1/sent", json={"sent": False}).status_code == 409
-    assert _status(env, "prospects", "p1") == "contacted"
-
-
 def test_recipients_say_who_can_be_sent_by_hand(client, env):
     _prospect(env, "p1", "a@acme.test", status="queued")
     _prospect(env, "p2", "b@acme.test", status="queued")              # Sellbird approved mail
@@ -311,8 +303,7 @@ class _Cfg:
 
 
 class _Env:
-    def __init__(self, instantly=""):
-        self.instantly_api_key = instantly
+    pass
 
 
 class _Provider:
@@ -327,9 +318,6 @@ class _Provider:
     (_Cfg(enabled=False), _Env(), True, False),                 # email off: hand sends only
     (_Cfg(provider="smtp"), _Env(), False, False),              # mailbox not connected
     (_Cfg(provider="gmail"), _Env(), True, True),               # connected: Sellbird sends
-    (_Cfg(provider="instantly"), _Env(instantly="k"), True, True),
-    (_Cfg(provider="instantly"), _Env(), True, False),
-    (_Cfg(provider="instantly", approval=True), _Env(instantly="k"), True, False),  # held
 ])
 def test_sellbird_can_send(monkeypatch, cfg, env, provider_ok, expected):
     import sellbird.config

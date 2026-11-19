@@ -90,7 +90,7 @@ class WarmupConfig(BaseModel):
     """Cold-email ramp for a new domain or mailbox.
 
     Sellbird doesn't run a warmup network itself; that needs a pool of real
-    inboxes (Instantly, Lemwarm, Mailreach...). This is the other half: no
+    inboxes (Lemwarm, Mailreach...). This is the other half: no
     cold email goes out for ``min_days`` after ``start_date``, then the cold
     cap climbs from ``start_sends`` by ``daily_increase`` a day until it
     reaches ``max_daily_sends``. Replies are never held. Empty
@@ -256,10 +256,10 @@ class SignatureConfig(BaseModel):
 
 class EmailChannelConfig(BaseModel):
     enabled: bool = True
-    # "instantly" (legacy), "gmail" (Gmail/Workspace via API — recommended),
+    # "gmail" (Gmail/Workspace via API — recommended),
     # "microsoft" (Microsoft 365 / Outlook via Graph), or "smtp" (any
     # SMTP+IMAP mailbox: AgentMail, Fastmail, ...)
-    provider: str = "instantly"
+    provider: str = "gmail"
     max_daily_sends: int = 50
     # Each extra sending inbox's daily cold-email cap (sellbird inboxes),
     # under the warmup ramp from the day that inbox started warming. The
@@ -275,8 +275,7 @@ class EmailChannelConfig(BaseModel):
     # address, as before. Raising it keeps model calls (and sends) for the
     # prospects that match the ICP best.
     min_write_score: int = 0
-    # Native providers queue mail for approval. Instantly cannot use that
-    # outbox, so it holds campaigns and escalates replies while this is true.
+    # Providers queue mail for approval in the Outbox.
     # Set false explicitly for full autopilot once you trust the output.
     require_approval: bool = True
     # Your own domains besides the sending address's and the booking link's
@@ -291,14 +290,12 @@ class EmailChannelConfig(BaseModel):
     max_bounce_rate: float = 0.05
     # false = a campaign stages only its first email. Follow-ups (steps 2 and
     # 3) are not prepared, so none can go out to someone who never answered;
-    # a reply is still read and answered as usual. Gmail/Microsoft/SMTP only.
+    # a reply is still read and answered as usual.
     follow_ups: bool = True
-    # New domain? Ramp cold email up slowly (see WarmupConfig). Native
-    # providers only: Instantly has its own warmup and per-account limits.
+    # New domain? Ramp cold email up slowly (see WarmupConfig).
     warmup: WarmupConfig = WarmupConfig()
     # Send cold email only in office hours, in each recipient's own time
-    # zone (see SendWindowConfig). None: no window, as before. Native
-    # providers only; Instantly schedules its own sends.
+    # zone (see SendWindowConfig). None: no window, as before.
     send_window: SendWindowConfig | None = None
     # A logo under every email (see SignatureConfig). Native providers only.
     signature: SignatureConfig = SignatureConfig()
@@ -342,26 +339,13 @@ def cold_daily_cap(email_config, today: _date | None = None) -> int:
 
 
 def legacy_sending_held(config) -> bool:
-    """True when Instantly is the provider and approval is required.
-
-    Instantly has no per-email approval queue, so with require_approval on
-    Sellbird holds campaign deployment and hands replies to a human.
-    """
-    email = getattr(getattr(config, "channels", None), "email", None)
-    return (getattr(email, "provider", "") == "instantly"
-            and bool(getattr(email, "require_approval", True)))
+    """Retained for backward compatibility. Always returns False."""
+    return False
 
 
 def sending_notice(config) -> str:
     """A plain-language warning when outbound sending is held by config, or ""."""
-    if not legacy_sending_held(config):
-        return ""
-    return (
-        "Instantly sending is held: channels.email.require_approval is true, and "
-        "Instantly has no approval queue. Campaigns stay as drafts and replies go to "
-        "a human (dashboard Activity tab). Set require_approval: false to let Instantly "
-        "send automatically, or switch to gmail, microsoft or smtp to approve each email."
-    )
+    return ""
 
 
 class LinkedInChannelConfig(BaseModel):
@@ -373,6 +357,10 @@ class LinkedInChannelConfig(BaseModel):
 class ChannelsConfig(BaseModel):
     email: EmailChannelConfig = EmailChannelConfig()
     linkedin: LinkedInChannelConfig = LinkedInChannelConfig()
+
+
+DEFAULT_OPT_OUT_LINE = "Not interested? Just let me know and I won't email you again."
+PREVIOUS_DEFAULT_OPT_OUT_LINE = 'Not interested? Reply "no thanks" and I won\'t email again.'
 
 
 class ComplianceConfig(BaseModel):
@@ -652,7 +640,6 @@ class SellbirdConfig(BaseModel):
 
 
 class EnvConfig(BaseModel):
-    instantly_api_key: str = ""
     linkedin_email: str = ""
     linkedin_password: str = ""
     # Native mail providers (channels.email.provider: gmail | smtp)
@@ -787,7 +774,6 @@ def load_env() -> EnvConfig:
     """Load environment variables from .env file."""
     load_dotenv()
     env = EnvConfig(
-        instantly_api_key=os.getenv("INSTANTLY_API_KEY", "").strip(),
         linkedin_email=os.getenv("LINKEDIN_EMAIL", "").strip(),
         linkedin_password=os.getenv("LINKEDIN_PASSWORD", "").strip(),
         gmail_client_id=os.getenv("GMAIL_CLIENT_ID", "").strip(),

@@ -1,6 +1,6 @@
 """Prospect-list export — the list itself is the product.
 
-Produces a CSV that drops straight into Instantly, Smartlead, or any
+Produces a CSV that drops straight into Smartlead, or any
 sequencer (email / first_name / last_name / company_name / personalization
 columns), plus Sellbird's own quality columns (score, email_status, signals)
 so a human can eyeball what they're getting.

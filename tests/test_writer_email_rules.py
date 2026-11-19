@@ -87,7 +87,7 @@ async def personal_prompt(state, rules="", **kw):
 
 async def sequence_prompt(state, rules="", **kw):
     brain = RecordingBrain(SEQ)
-    await writer(brain, state, rules, provider="instantly", **kw)._write_sequence(
+    await writer(brain, state, rules, provider="gmail", **kw)._write_sequence(
         [await prospect(state)])
     return brain.prompts[0]
 
@@ -233,7 +233,7 @@ async def test_a_run_puts_the_rules_in_every_prompt(state, tmp_path):
     path.write_text(RULES, encoding="utf-8")
     await prospect(state)
     brain = RecordingBrain(SEQ)
-    await Writer(brain, state, config(provider="instantly", email_rules=str(path))).run()
+    await Writer(brain, state, config(provider="gmail", email_rules=str(path))).run()
     assert brain.prompts and all(RULES in p for p in brain.prompts)
 
 

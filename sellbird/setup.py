@@ -132,20 +132,6 @@ def _ask_brain_config() -> BrainConfig:
     return BrainConfig(provider="local", model=model or "local")
 
 
-async def _test_instantly(api_key: str) -> bool:
-    """Test the Instantly API key."""
-    import httpx
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(
-                "https://api.instantly.ai/api/v2/accounts",
-                headers={"Authorization": f"Bearer {api_key}"},
-            )
-            return resp.status_code == 200
-    except Exception:
-        return False
-
-
 class SetupWizard:
     """Interactive wizard to configure Sellbird from scratch."""
 
@@ -176,7 +162,7 @@ class SetupWizard:
         await self._check_prerequisites()
 
         # Step 2: Connect email platform
-        _print_step(2, total_steps, "Email Platform (Instantly)")
+        _print_step(2, total_steps, "Email Platform (Gmail / SMTP / Microsoft)")
         await self._setup_email_platform()
 
         # Step 3: LinkedIn (optional)
@@ -210,39 +196,14 @@ class SetupWizard:
             print("✓ Ready")
 
     async def _setup_email_platform(self):
-        """Configure Instantly for email outreach."""
-        _print_sellbird("I use Instantly to send emails and run campaigns.")
-        _print_sellbird("You'll need an Instantly account and an API key.")
-        _print_sellbird("Find your API key at: https://app.instantly.ai/app/settings/integrations")
-
-        existing_key = _read_env_file().get("INSTANTLY_API_KEY", "")
-        hint = "Enter keeps your current key" if existing_key else "input hidden"
-
-        while True:
-            api_key = _ask(
-                f"Instantly API key ({hint}; or press Enter to skip)",
-                required=False,
-                secret=True,
-            )
-            if not api_key and existing_key:
-                api_key = existing_key
-                break
-            if not api_key:
-                _print_sellbird("Skipping email setup for now. You can add INSTANTLY_API_KEY")
-                _print_sellbird("to .env later, or use native Gmail / M365 sending.")
-                return
-
-            print("  Verifying API key...", end=" ", flush=True)
-            if await _test_instantly(api_key):
-                print("✓ Valid")
-                break
-            else:
-                print("✗ Could not verify (invalid key or network error)")
-                retry = _ask_yes_no("Try entering the key again?", default=True)
-                if not retry:
-                    break
-
-        self.env_vars["INSTANTLY_API_KEY"] = api_key
+        """Configure email outreach provider."""
+        _print_sellbird("Sellbird sends emails via Gmail, Microsoft 365, or any SMTP server.")
+        provider = _ask("Email provider (gmail / smtp / microsoft)", default="gmail")
+        self.email_provider = provider.lower().strip() if provider else "gmail"
+        if self.email_provider == "smtp":
+            self.env_vars["SMTP_HOST"] = _ask("SMTP Host", default="smtp.mail.com")
+            self.env_vars["SMTP_USERNAME"] = _ask("SMTP Username", default="")
+            self.env_vars["SMTP_PASSWORD"] = _ask("SMTP Password", secret=True)
 
     def _setup_linkedin(self):
         """Configure LinkedIn credentials (optional)."""
@@ -344,7 +305,7 @@ class SetupWizard:
             "channels": {
                 "email": {
                     "enabled": True,
-                    "provider": "instantly",
+                    "provider": getattr(self, "email_provider", "gmail"),
                     "max_daily_sends": 50,
                 },
                 "linkedin": {
@@ -511,7 +472,6 @@ class SetupWizard:
         # Show what's configured
         checks = {
             "Local Brain": True,
-            "Instantly API": bool(self.env_vars.get("INSTANTLY_API_KEY")),
             "LinkedIn": bool(self.env_vars.get("LINKEDIN_EMAIL")),
             "Product trained": _product_configured(),
         }
@@ -537,8 +497,8 @@ class SetupWizard:
   Before you send a single email:
     1. Use a dedicated sending domain (not your main domain) with
        SPF, DKIM, and DMARC configured.
-    2. Warm it up 2-4 weeks before real volume (Instantly has warmup).
-    3. Make sure your Instantly campaigns include an unsubscribe
+    2. Warm it up 2-4 weeks before real volume.
+    3. Make sure your campaigns include an unsubscribe
        option and your physical mailing address (CAN-SPAM).
     See docs/deliverability.md.
 """)

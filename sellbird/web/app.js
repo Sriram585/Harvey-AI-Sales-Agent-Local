@@ -259,7 +259,7 @@ function actionText(a) {
     case 'write_failed': return 'Couldn’t write for some contacts' + (camp ? ' in “' + camp + '”' : '');
     case 'stage_campaign': return 'Queued ' + n(d.staged, 'email', 'emails') + ' from “' + camp + '”' +
       (d.mode ? ' · ' + escHtml(d.mode) : '');
-    case 'send_campaign': return 'Sent “' + camp + '” to Instantly · ' + n(d.leads_added, 'lead', 'leads');
+    case 'send_campaign': return 'Deployed “' + camp + '” · ' + n(d.leads_added, 'lead', 'leads');
     case 'email_sent': return d.kind === 'reply' ? 'Sent a reply to ' + who
       : 'Sent email ' + escHtml(String(d.step || 1)) + ' to ' + who;
     case 'reply': return 'Answered ' + who + intent;
@@ -538,11 +538,8 @@ function renderFigures(stats) {
     '<div class="kpi-main"><span class="kpi-value' + (value ? '' : ' zero') + '">' + value + '</span>' + spark + '</div>' +
     '<span class="kpi-note">' + note + '</span></div>';
 
-  // Instantly sends from its own servers, so the Outbox never sees them.
-  const sent = stats.email_provider === 'instantly'
-    ? card('Emails sent', '&mdash;', '', 'Instantly tracks sends')
-    : card('Emails sent', sum(t.sent), sparkBars(t.sent, 'Emails sent per day, last 14 days'),
-           'last 14 days · <b>' + (stats.outbox_approved || 0) + '</b> scheduled');
+  const sent = card('Emails sent', sum(t.sent), sparkBars(t.sent, 'Emails sent per day, last 14 days'),
+            'last 14 days · <b>' + (stats.outbox_approved || 0) + '</b> scheduled');
   const waiting = (stats.outbox_pending || 0) + (stats.needs_human || 0);
   const waitNote = [
     stats.outbox_pending ? stats.outbox_pending + ' to approve' : '',
@@ -1218,7 +1215,7 @@ async function loadSettings() {
   if (!data) return;
 
   // Active provider indicator
-  const prov = data.provider || 'instantly';
+  const prov = data.provider || 'gmail';
   const provEl = document.getElementById('active-provider');
   if (provEl) provEl.textContent = prov;
 
@@ -1253,7 +1250,6 @@ async function loadSettings() {
   savedPh('smtp-pass', data.smtp_password_set, 'Enter password / app password');
   savedPh('imap-pass', data.imap_password_set, 'Same as SMTP password');
   document.getElementById('imap-same-pass').checked = !data.imap_password_set;
-  savedPh('instantly-key', data.instantly_api_key_set, 'Enter your Instantly API key');
   savedPh('linkedin-password', data.linkedin_password_set, 'Enter password');
 
   // Gmail auth status chip
@@ -1321,35 +1317,11 @@ async function saveEnv(payload, okMsg) {
   else showToast((data && data.message) || 'Save failed — is the dashboard still running?', 'error');
 }
 
-// Secrets are only sent when typed: an empty box means "keep the saved one".
-function saveInstantly() {
-  const key = document.getElementById('instantly-key').value.trim();
-  if (!key) { showToast('Enter a new key first. The saved one is kept.', 'error'); return; }
-  saveEnv({INSTANTLY_API_KEY: key}, 'Instantly API key saved.');
-}
-
 function saveLinkedIn() {
   const payload = {LINKEDIN_EMAIL: document.getElementById('linkedin-email').value.trim()};
   const pass = document.getElementById('linkedin-password').value;
   if (pass) payload.LINKEDIN_PASSWORD = pass;
   saveEnv(payload, 'LinkedIn credentials saved.');
-}
-
-
-
-async function testInstantly() {
-  const key = document.getElementById('instantly-key').value.trim();
-  const el = document.getElementById('instantly-test-result');
-  el.innerHTML = '<div class="test-result pending">Testing&hellip;</div>';
-  const data = await api('/api/settings/test-instantly', {
-    method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({api_key: key})
-  });
-  if (!data) {
-    el.innerHTML = '<div class="test-result error">Could not reach the dashboard server.</div>';
-    return;
-  }
-  el.innerHTML = '<div class="test-result ' + (data.success ? 'success' : 'error') + '">' + escHtml(failMsg(data, '')) + '</div>';
 }
 
 // ── Controls ──
@@ -1684,23 +1656,18 @@ function sendingModeBanner(m) {
       '<button class="btn btn-secondary btn-sm" onclick="setSendingMode(\'approval\')"' +
         (_modeBusy ? ' disabled' : '') + '>Turn off autopilot</button></div>';
   }
-  const instantly = m.provider === 'instantly';
   return '<div class="banner mode-banner">' + icon('check') + '<div><b>Approval mode</b>' +
-    '<p>' + (instantly
-      ? 'Instantly can’t hold single emails, so campaigns aren’t sent to Instantly until you turn on autopilot.'
-      : 'Every email Sellbird writes waits here until you approve it.') +
-    ' <a href="#" onclick="goTab(\'settings\');return false">About autopilot</a></p></div></div>';
+    '<p>Every email Sellbird writes waits here until you approve it. ' +
+    '<a href="#" onclick="goTab(\'settings\');return false">About autopilot</a></p></div></div>';
 }
 
 function sendingModeCard(m) {
   if (!m) return '<div class="card muted">Couldn’t read the sending mode.</div>';
   const auto = m.mode === 'autopilot';
-  const instantly = m.provider === 'instantly';
   const domains = (m.your_domains || []).map(escHtml).join(', ') || 'none yet';
   let html = '<div class="card mode-card"><h3>Sending mode: ' + (auto ? 'Autopilot' : 'Approval') + '</h3>' +
     '<p><b>Approval</b> (the default): every email Sellbird writes, first emails, follow-ups and replies, ' +
-      'waits in the Outbox until you approve it.' +
-      (instantly ? ' On Instantly, which can’t hold single emails, that means campaigns aren’t deployed.' : '') + '</p>' +
+      'waits in the Outbox until you approve it.</p>' +
     '<p><b>Autopilot</b>: Sellbird sends on its own, on schedule, within your daily limit and quiet hours. ' +
       'Opt-outs, bounces and Pause all sending work the same. It still holds an email for you when it links ' +
       'to, or gives an address at, a site that isn’t yours, or quotes Sellbird’s own instructions: text from ' +
@@ -1709,8 +1676,7 @@ function sendingModeCard(m) {
       '. Add others under <code>channels.email.link_domains</code> in <code>' + escHtml(m.file) + '</code>.</p>';
   if (auto) {
     html += '<div class="convo-actions"><span class="muted">Turning it off works at once: emails autopilot ' +
-      'approved that haven’t gone out come back to the Outbox.' +
-      (instantly ? ' Campaigns already on Instantly keep running until you pause them there.' : '') + '</span>' +
+      'approved that haven’t gone out come back to the Outbox.</span>' +
       '<button class="btn btn-primary btn-sm" onclick="setSendingMode(\'approval\')"' +
         (_modeBusy ? ' disabled' : '') + '>Turn off autopilot</button></div>';
   } else if (_autopilotArmed) {
@@ -1759,9 +1725,7 @@ async function setSendingMode(mode) {
       showToast(mode === 'autopilot'
         ? 'Autopilot is on from Sellbird’s next cycle. Held emails still wait for you.'
         : 'Autopilot is off. Every email waits for you' +
-          (res.requeued ? '; ' + res.requeued + ' queued by autopilot came back to the Outbox.' : '.') +
-          (_sendingMode && _sendingMode.provider === 'instantly'
-            ? ' Campaigns already on Instantly keep running: pause them in Instantly.' : ''), 'success');
+          (res.requeued ? '; ' + res.requeued + ' queued by autopilot came back to the Outbox.' : '.'), 'success');
     } else {
       showToast(failMsg(res, 'Couldn’t change the sending mode.'), 'error');
     }
@@ -2622,7 +2586,7 @@ async function loadInboxes() {
   _inboxes = data;
   if (!data.native) {
     actions.innerHTML = '';
-    el.innerHTML = emptyState(icon('inboxes'), 'Instantly sends for you',
+    el.innerHTML = emptyState(icon('inboxes'), 'No mailbox configured',
       'Sending through several of your own inboxes works with Gmail, Microsoft 365 or SMTP. ' +
       'Set channels.email.provider in sellbird.yaml to one of those to use it.');
     return;

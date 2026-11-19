@@ -115,7 +115,7 @@ async def test_tick_steps_run_in_order_and_never_stop_each_other(registry):
 async def test_the_heartbeat_runs_tick_steps_each_cycle(registry, monkeypatch, tmp_path):
     from sellbird.state import StateManager
     from tests.test_prospecting_stall import (
-        _draft_and_open_conversation, _instantly_with_a_draft_and_an_open_conversation)
+        _draft_and_open_conversation, _with_a_draft_and_an_open_conversation)
 
     state = StateManager(str(tmp_path / "s.db"))
     await state.init_db()
@@ -127,7 +127,7 @@ async def test_the_heartbeat_runs_tick_steps_each_cycle(registry, monkeypatch, t
 
     registry.add_tick_step("ext.after-cycle", step)
     calls, stop = [], asyncio.Event()
-    main_mod = _instantly_with_a_draft_and_an_open_conversation(monkeypatch, state, calls, stop, True)
+    main_mod = _with_a_draft_and_an_open_conversation(monkeypatch, state, calls, stop, True)
     await asyncio.wait_for(main_mod.heartbeat(stop), timeout=30)
     assert calls == ["replies", "send"] and seen == [True]
 

@@ -397,7 +397,7 @@ def test_new_env_file_is_owner_only_whatever_the_umask(authed):
 @POSIX
 def test_existing_env_file_is_tightened_and_its_other_lines_kept(authed, env):
     original = ("# Sellbird settings\n"
-                "INSTANTLY_API_KEY=keep-me\n"
+                "LINKEDIN_EMAIL=keep-me\n"
                 "\n"
                 "export SMTP_HOST=old.example.test\n"
                 "CUSTOM_THING=value # with comment\n"
@@ -408,7 +408,7 @@ def test_existing_env_file_is_tightened_and_its_other_lines_kept(authed, env):
                        json={"SMTP_HOST": "new.example.test", "SMTP_PORT": 587}).json()["success"]
     text = dash.ENV_FILE.read_text()
     assert text == ("# Sellbird settings\n"
-                    "INSTANTLY_API_KEY=keep-me\n"
+                    "LINKEDIN_EMAIL=keep-me\n"
                     "\n"
                     "SMTP_HOST=new.example.test\n"
                     "CUSTOM_THING=value # with comment\n"

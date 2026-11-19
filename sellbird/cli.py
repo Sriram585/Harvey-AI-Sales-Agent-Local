@@ -434,7 +434,7 @@ def cmd_export(args):
         if count == 0 and not args.all:
             print("  Tip: no deliverable emails yet? Verify addresses or use --all for the raw list.\n")
         else:
-            print("  The CSV imports directly into Instantly, Smartlead, or any sequencer.\n")
+            print("  The CSV imports directly into Smartlead or any sequencer.\n")
 
     asyncio.run(_export())
 
