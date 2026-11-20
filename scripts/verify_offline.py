@@ -215,8 +215,11 @@ async def run_offline_verification(model_name: str | None = None) -> dict:
     print("[3/5] Testing simulated Ollama outage & durable queue draining...")
     queue_test_passed = False
     with StrictOfflineSandbox():
-        # Point to unreachable port
+        # Point to unreachable port with fast timeout
+        orig_url = engine.ollama.base_url
+        orig_timeout = engine.ollama.timeout
         engine.ollama.base_url = "http://127.0.0.1:19999"
+        engine.ollama.timeout = 2.0
         try:
             await engine.classify_reply(
                 prospect_id=prospect_id,
@@ -226,9 +229,11 @@ async def run_offline_verification(model_name: str | None = None) -> dict:
             assert exc.queued_task_id > 0
             assert exc.deterministic_fallback["intent"] == "unsubscribe"
             print(f"  [PASS] Deterministic fallback triggered (Task #{exc.queued_task_id} enqueued)")
+        finally:
+            engine.ollama.base_url = orig_url
+            engine.ollama.timeout = orig_timeout
 
         # Restore Ollama URL and drain queue
-        engine.ollama.base_url = DEFAULT_OLLAMA_URL
         drain_result = await engine.process_queue()
         print(f"  [PASS] Durable queue drained: {drain_result['processed']} processed, {drain_result['failed']} failed")
         queue_test_passed = drain_result["processed"] >= 1

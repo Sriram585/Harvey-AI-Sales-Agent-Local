@@ -38,6 +38,67 @@ def _strip_markdown_fences(content: str) -> str:
     return text.strip()
 
 
+def _clean_and_unwrap_json(text: str, response_model: type[T]) -> T:
+    """Validate JSON text against response_model, automatically unwrapping common LLM wrapper structures."""
+    clean_text = _strip_markdown_fences(text)
+
+    # 1. Direct validation attempt
+    try:
+        return response_model.model_validate_json(clean_text)
+    except Exception:
+        pass
+
+    # 2. Parse as python object and handle container wrappers
+    try:
+        data = json.loads(clean_text)
+
+        # Handle list when container expects list inside a key
+        if isinstance(data, list):
+            for field_name in ("signals", "items", "data", "results"):
+                if hasattr(response_model, "model_fields") and field_name in response_model.model_fields:
+                    try:
+                        return response_model.model_validate({field_name: data})
+                    except Exception:
+                        pass
+
+        if isinstance(data, dict):
+            # Check if fields are wrapped in 'properties', 'data', 'result', etc.
+            wrapper_keys = (
+                "properties",
+                "data",
+                "response",
+                "result",
+                "output",
+                "profile",
+                "company_profile",
+                "icp",
+                "signals",
+                "research",
+            )
+            for key in wrapper_keys:
+                if key in data and isinstance(data[key], (dict, list)):
+                    try:
+                        return response_model.model_validate(data[key])
+                    except Exception:
+                        pass
+                    # In case data[key] is a list and model expects {key: [...]}
+                    try:
+                        return response_model.model_validate({key: data[key]})
+                    except Exception:
+                        pass
+
+            # Direct dict validation
+            try:
+                return response_model.model_validate(data)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    # 3. Final attempt to raise informative Pydantic ValidationError
+    return response_model.model_validate_json(clean_text)
+
+
 class OllamaClient:
     """Client for native Ollama API endpoints strictly on localhost."""
 
@@ -151,7 +212,7 @@ class OllamaClient:
                 # Attempt 1 validation
                 clean_text = _strip_markdown_fences(raw_text)
                 try:
-                    parsed = response_model.model_validate_json(clean_text)
+                    parsed = _clean_and_unwrap_json(clean_text, response_model)
                     status = "success"
                     return parsed
                 except (ValidationError, json.JSONDecodeError) as parse_err:
@@ -168,7 +229,7 @@ class OllamaClient:
                             "role": "user",
                             "content": (
                                 f"The previous response failed schema validation: {parse_err}.\n"
-                                "Please fix the JSON formatting error and respond with ONLY the corrected valid JSON object."
+                                "Please fix the JSON formatting error and respond with ONLY the corrected flat JSON object."
                             ),
                         },
                     ]
@@ -188,7 +249,7 @@ class OllamaClient:
                         repair_data = repair_resp.json()
                         raw_repair_text = repair_data.get("message", {}).get("content", "")
                         clean_repair = _strip_markdown_fences(raw_repair_text)
-                        parsed = response_model.model_validate_json(clean_repair)
+                        parsed = _clean_and_unwrap_json(clean_repair, response_model)
                         json_repaired = True
                         status = "success"
                         eval_count += repair_data.get("eval_count", 0)

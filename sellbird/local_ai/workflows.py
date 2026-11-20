@@ -14,7 +14,7 @@ import re
 from datetime import datetime, timezone
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from sellbird.local_ai import embeddings
 from sellbird.local_ai.ollama_client import (
@@ -185,7 +185,8 @@ class WorkflowEngine:
             f"Company: {company['name']}\n"
             f"Website: {company.get('website', '')}\n"
             f"Notes: {raw_notes}\n\n"
-            "Return JSON matching the schema."
+            "Respond with a flat JSON object with keys: industry, value_proposition, target_market, differentiators, summary.\n"
+            "Do NOT wrap in 'properties' or output schema definitions."
         )
         system_prompt = "You are an expert enterprise B2B strategy analyst. Output valid JSON only."
 
@@ -207,7 +208,7 @@ class WorkflowEngine:
             await conn.commit()
             return {"status": "success", "company_id": company_id, "profile": profile_dict}
 
-        except OllamaUnavailableError:
+        except (OllamaUnavailableError, ValidationError):
             # Deterministic Fallback
             fallback = {
                 "industry": "Enterprise Software",
@@ -251,7 +252,8 @@ class WorkflowEngine:
             f"Description: {product.get('description', '')}\n"
             f"Value Proposition: {product.get('value_prop', '')}\n"
             f"Pricing Tier: {product.get('pricing_tier', '')}\n\n"
-            "Return JSON matching the schema."
+            "Respond with a flat JSON object with keys: target_roles, company_size, industries, pain_points, buying_triggers, disqualifiers.\n"
+            "Do NOT wrap in 'properties' or output schema definitions."
         )
         system_prompt = "You are a specialized B2B sales development expert. Output valid JSON only."
 
@@ -279,7 +281,7 @@ class WorkflowEngine:
             )
             return {"status": "success", "product_id": product_id, "icp_id": icp_id, "icp": icp_dict}
 
-        except OllamaUnavailableError:
+        except (OllamaUnavailableError, ValidationError):
             fallback = {
                 "target_roles": ["VP Engineering", "DevOps Lead", "CTO", "Head of Infrastructure"],
                 "company_size": ["50-1000"],
@@ -338,7 +340,7 @@ class WorkflowEngine:
             await self.store.update_prospect(prospect_id, research_json=research_dict)
             return {"status": "success", "prospect_id": prospect_id, "research": research_dict}
 
-        except OllamaUnavailableError:
+        except (OllamaUnavailableError, ValidationError):
             # Deterministic Tech-Stack scan
             tech_keywords = ["AWS", "GCP", "Kubernetes", "EKS", "GKE", "GitHub", "GitLab", "npm", "Docker"]
             found_tech = [t for t in tech_keywords if t.lower() in raw_text.lower()]
@@ -480,7 +482,7 @@ class WorkflowEngine:
 
             return {"status": "success", "prospect_id": prospect_id, "signals": processed_signals}
 
-        except OllamaUnavailableError:
+        except (OllamaUnavailableError, ValidationError):
             # Deterministic Keyword Fallback
             signals_found = self._deterministic_extract_signals(raw_text)
             processed_signals = []
@@ -605,7 +607,7 @@ class WorkflowEngine:
                 "grounding_signals": resp.grounding_signals,
             }
 
-        except OllamaUnavailableError:
+        except (OllamaUnavailableError, ValidationError):
             evidence = grounded_signals[0]["evidence_quote"] if grounded_signals else "operational complexity"
             sig_type = grounded_signals[0]["signal_type"] if grounded_signals else "cloud operations"
             fallback_statement = (
@@ -723,7 +725,7 @@ class WorkflowEngine:
                 "reasoning": qual.reasoning,
             }
 
-        except OllamaUnavailableError:
+        except (OllamaUnavailableError, ValidationError):
             total_score = deterministic_score
             priority = "High" if total_score >= 75.0 else ("Medium" if total_score >= 45.0 else "Low")
             reasoning = f"Deterministic scoring fallback applied. Embedding fit={emb_similarity:.2f}, verified signals={len(grounded_signals)}."
@@ -812,7 +814,7 @@ class WorkflowEngine:
                 "email_status": "draft_only",
             }
 
-        except OllamaUnavailableError:
+        except (OllamaUnavailableError, ValidationError):
             contact = prospect.get("contact_name") or "there"
             p_name = product["name"] if product else "Vanguard Ops"
             v_prop = product.get("value_prop", "") if product else ""
@@ -889,7 +891,7 @@ class WorkflowEngine:
                 "reasoning": resp.reasoning,
             }
 
-        except OllamaUnavailableError:
+        except (OllamaUnavailableError, ValidationError):
             # Deterministic keyword triage
             text_lower = reply_text.lower()
             if any(w in text_lower for w in ["unsubscribe", "remove me", "opt out", "stop emailing"]):

@@ -1,0 +1,92 @@
+{
+  "timestamp": "2026-11-20T01:37:53.543360+00:00",
+  "acceptance_status": "ALL_WORKFLOWS_PASSED",
+  "external_network_calls": 0,
+  "active_model": "qwen2.5:1.5b",
+  "hardware_profile": {
+    "tier": "standard_laptop",
+    "recommended_model": "qwen3:1.7b",
+    "fallback_models": [
+      "qwen3:4b"
+    ],
+    "ram_gb": 15.65,
+    "available_ram_gb": 4.61,
+    "cpu_cores": 12,
+    "gpu_name": null,
+    "vram_gb": 0.0,
+    "rationale": "Detected standard laptop setup with 15.65 GB RAM (CPU-only / low VRAM). qwen3:1.7b recommended to ensure low latency and negligible CPU/RAM footprint."
+  },
+  "workflows": {
+    "1_company_profile": {
+      "status": "PASS",
+      "latency_ms": 21420.75,
+      "summary": "Enterprise Software and IT Services"
+    },
+    "2_product_icps": {
+      "status": "PASS",
+      "latency_ms": 141745.23,
+      "products_evaluated": [
+        "CloudCost Guard",
+        "PipeGuard",
+        "ShiftSync"
+      ]
+    },
+    "3_prospect_research": {
+      "status": "PASS",
+      "latency_ms": 10692.39,
+      "tech_stack": [
+        "AWS",
+        "multi-region Kubernetes cloud"
+      ]
+    },
+    "4_multi_product_fit_matrix": {
+      "status": "PASS",
+      "latency_ms": 96.15,
+      "primary_product_id": 16,
+      "scores": {
+        "CloudCost Guard": 0.5596,
+        "PipeGuard": 0.2952,
+        "ShiftSync": 0.3019
+      }
+    },
+    "5_buying_signals_grounding": {
+      "status": "PASS",
+      "latency_ms": 26280.47,
+      "signals_count": 4,
+      "verified_count": 4,
+      "unverified_count": 0
+    },
+    "6_problem_statement": {
+      "status": "PASS",
+      "latency_ms": 14664.95,
+      "statement": "Our cloud expenses have surged due to a rapidly expanding transaction volume, leading to skyrocketing AWS and multi-regi..."
+    },
+    "7_hybrid_prospect_score": {
+      "status": "PASS",
+      "latency_ms": 15815.77,
+      "total_score": 75.53,
+      "priority": "High",
+      "deterministic_score": 75.53,
+      "llm_score": 75.53
+    },
+    "8_outreach_email_draft": {
+      "status": "PASS",
+      "latency_ms": 15719.73,
+      "subject": "Cut Cloud Costs by 30-45% with ApexFin's CloudCost Guard",
+      "status_label": "draft_only"
+    },
+    "9_reply_classification": {
+      "status": "PASS",
+      "latency_ms": 6707.09,
+      "intent": "interested",
+      "confidence": 0.95,
+      "next_action": "schedule_demo"
+    }
+  },
+  "grounding_verification": {
+    "verified_count": 4,
+    "unverified_count": 0
+  },
+  "queue_fallback_test": "PASS",
+  "notes": "Verified 100% offline inside StrictOfflineSandbox(). Zero cloud telemetry."
+}
