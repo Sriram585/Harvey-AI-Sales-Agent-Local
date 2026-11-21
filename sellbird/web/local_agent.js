@@ -258,14 +258,12 @@
 
     tbody.innerHTML = '';
     for (const p of prospects) {
-      // Enrich with score & fit details
-      const details = await api(`/api/local/prospects/${p.id}`).catch(() => p);
-      const scores = details.scores || [];
+      const scores = p.scores || [];
       const latestScore = scores[0] || {};
       const priority = latestScore.priority || 'Medium';
       const totalScore = latestScore.total_score != null ? latestScore.total_score : '--';
 
-      const fit = details.product_fit_matrix || {};
+      const fit = p.product_fit_matrix || {};
       const primaryProdName = fit.primary_product_id
         ? (fit.primary_product_id === 1 ? 'CloudCost Guard' : fit.primary_product_id === 2 ? 'PipeGuard' : 'ShiftSync')
         : 'Auto-detecting...';
@@ -330,10 +328,10 @@
             <p style="margin-top:6px;"><strong>Tech Stack:</strong> ${(rObj.tech_stack || []).map((t) => `<span class="badge-tag">${t}</span>`).join(' ')}</p>
           `;
         } else {
-          resBox.textContent = 'No research intelligence generated yet. Click "1. Research".';
+          resBox.textContent = 'No research generated yet.';
         }
       } catch {
-        resBox.textContent = p.research_json || 'Not researched yet.';
+        resBox.textContent = p.research_json || 'No research generated yet.';
       }
 
       // Product Fit Matrix
@@ -363,7 +361,7 @@
           fitBox.textContent = 'Error parsing fit scores.';
         }
       } else {
-        fitBox.textContent = 'Fit matrix not calculated yet. Click "2. Fit Matrix".';
+        fitBox.textContent = 'Fit matrix not calculated yet.';
       }
 
       // Buying Signals
@@ -383,7 +381,7 @@
           </div>
         `).join('');
       } else {
-        sigBox.textContent = 'No buying signals extracted yet. Click "3. Buying Signals".';
+        sigBox.textContent = 'No signals classified yet.';
       }
 
       // Problem Statement
@@ -392,7 +390,7 @@
       if (problems.length > 0) {
         probBox.innerHTML = `<p>${escapeHtml(problems[0].statement)}</p>`;
       } else {
-        probBox.textContent = 'No problem statement generated yet. Click "4. Problem Statement".';
+        probBox.textContent = 'No problem statement generated yet.';
       }
 
       // Score
@@ -409,7 +407,7 @@
           <p style="font-size:11px; margin-top:4px; font-style:italic;">${escapeHtml(s.reasoning || '')}</p>
         `;
       } else {
-        scoreBox.textContent = 'Not scored yet. Click "5. Hybrid Score".';
+        scoreBox.textContent = 'Not scored yet.';
       }
 
       // Outreach Email
@@ -422,7 +420,7 @@
           <div style="background:#FFF; border:1px solid #DDD; padding:10px; margin-top:8px; white-space:pre-wrap; font-size:12px;">${escapeHtml(em.body)}</div>
         `;
       } else {
-        emailBox.textContent = 'No email drafted yet. Click "6. Outreach Email".';
+        emailBox.textContent = 'No email drafted yet.';
       }
 
     } catch (e) {

@@ -222,6 +222,8 @@ async def get_system_status():
     try:
         installed_models = await _engine.ollama.health_check()
         ollama_online = True
+        if installed_models and _engine.model not in installed_models:
+            _engine.model = installed_models[0]
     except Exception:
         pass
 
@@ -324,7 +326,17 @@ async def list_icps_endpoint():
 
 @router.get("/prospects")
 async def list_prospects_endpoint():
-    return await _store.list_prospects()
+    prospects = await _store.list_prospects()
+    enriched = []
+    for p in prospects:
+        fit = await _store.get_product_fit(p["id"])
+        scores = await _store.get_prospect_scores(p["id"])
+        enriched.append({
+            **p,
+            "product_fit_matrix": fit,
+            "scores": scores,
+        })
+    return enriched
 
 
 @router.get("/prospects/{prospect_id}")
